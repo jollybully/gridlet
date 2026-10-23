@@ -6,7 +6,13 @@ No tiling-manager dashboards, no window rules, no config files. One grid, one ge
 
 > Gridlet is an independent open-source project inspired by the *documented behaviour* of [Divvy](https://mizage.com/help/divvy/user_guide.html). It contains no Divvy code or assets, and is not affiliated with Mizage.
 
-![Gridlet grid and settings](design/native-ui-pass/gridlet-ui-review.png)
+![Gridlet panel](docs/media/hero.png)
+
+*The panel above is rendered directly from Gridlet's own AppKit views — it is a product render, not a screen recording.*
+
+![Idle and drag states](docs/media/states.png)
+
+![Gridlet settings](docs/media/settings.png)
 
 ## Status: alpha
 
