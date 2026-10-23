@@ -1,0 +1,137 @@
+{
+  "expectedTarget" : {
+    "height" : 595.5,
+    "width" : 952.5,
+    "x" : 0,
+    "y" : 46
+  },
+  "gridFrame" : {
+    "height" : 272,
+    "width" : 272,
+    "x" : 816,
+    "y" : 531
+  },
+  "panelBefore" : {
+    "height" : 350,
+    "width" : 300,
+    "x" : 802,
+    "y" : 467
+  },
+  "panelDuring" : [
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    },
+    {
+      "height" : 350,
+      "width" : 300,
+      "x" : 802,
+      "y" : 467
+    }
+  ],
+  "panelMoved" : false,
+  "panelText" : [
+
+  ],
+  "panelVisibleAfterRelease" : false,
+  "pass" : true,
+  "targetAfter" : {
+    "height" : 596,
+    "width" : 952,
+    "x" : 0,
+    "y" : 46
+  },
+  "targetBefore" : {
+    "height" : 668,
+    "width" : 800,
+    "x" : 120,
+    "y" : 379
+  },
+  "targetMatches" : true
+}

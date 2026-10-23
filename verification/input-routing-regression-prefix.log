@@ -1,0 +1,22 @@
+=== Input routing regression PRE-FIX (captured before implementation change) ===
+Date: 2026-10-23T22:13:15Z
+Host: arm64 macOS 15.2
+Command: swift test --filter InputRoutingRegressionTests
+
+Failures (6 assertions across 4 tests):
+
+1. testGridPanelWindowDisablesBackgroundAndWindowDrag
+   - XCTAssertFalse failed: isMovableByWindowBackground was true
+   - XCTAssertFalse failed: isMovable was true (default)
+
+2. testGridViewMouseDownDoesNotMoveWindowAndAcceptsFirstMouse
+   - XCTAssertFalse failed: mouseDownCanMoveWindow default true
+   - XCTAssertTrue failed: acceptsFirstMouse(for: nil) default false
+
+3. testSendEventFirstClickCommitsWhenPanelNotKey
+   - XCTAssertEqual failed: commits 0 vs expected 1
+
+4. testSendEventGridDragDoesNotMovePanelOrigin
+   - XCTAssertGreaterThanOrEqual failed: commits 0 vs expected >= 1
+
+exit_status=1

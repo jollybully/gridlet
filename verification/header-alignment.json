@@ -1,0 +1,174 @@
+[
+  {
+    "centerDelta" : 0,
+    "close" : {
+      "height" : 32,
+      "width" : 28.5,
+      "x" : 13,
+      "y" : 335.5
+    },
+    "group" : {
+      "height" : 22,
+      "width" : 65,
+      "x" : 127.5,
+      "y" : 340
+    },
+    "headerCenterY" : 351.5,
+    "icon" : {
+      "height" : 22,
+      "width" : 22,
+      "x" : 127.5,
+      "y" : 340
+    },
+    "iconTitleGap" : 6,
+    "panelMidX" : 160,
+    "panelSize" : {
+      "height" : 380,
+      "width" : 320,
+      "x" : 0,
+      "y" : 0
+    },
+    "scenario" : "safari_short",
+    "settings" : {
+      "height" : 35,
+      "width" : 28,
+      "x" : 279,
+      "y" : 334
+    },
+    "title" : {
+      "height" : 16,
+      "width" : 41,
+      "x" : 153.5,
+      "y" : 343
+    }
+  },
+  {
+    "centerDelta" : 0.25,
+    "close" : {
+      "height" : 32,
+      "width" : 28.5,
+      "x" : 13,
+      "y" : 335.5
+    },
+    "group" : {
+      "height" : 22,
+      "width" : 147.5,
+      "x" : 86.5,
+      "y" : 340
+    },
+    "headerCenterY" : 351.5,
+    "icon" : {
+      "height" : 22,
+      "width" : 22,
+      "x" : 86.5,
+      "y" : 340
+    },
+    "iconTitleGap" : 6,
+    "panelMidX" : 160,
+    "panelSize" : {
+      "height" : 380,
+      "width" : 320,
+      "x" : 0,
+      "y" : 0
+    },
+    "scenario" : "visual_studio_code_medium",
+    "settings" : {
+      "height" : 35,
+      "width" : 28,
+      "x" : 279,
+      "y" : 334
+    },
+    "title" : {
+      "height" : 16,
+      "width" : 123.5,
+      "x" : 112.5,
+      "y" : 343
+    }
+  },
+  {
+    "centerDelta" : 0,
+    "close" : {
+      "height" : 32,
+      "width" : 28.5,
+      "x" : 13,
+      "y" : 335.5
+    },
+    "group" : {
+      "height" : 22,
+      "width" : 222,
+      "x" : 49,
+      "y" : 340
+    },
+    "headerCenterY" : 351.5,
+    "icon" : {
+      "height" : 22,
+      "width" : 22,
+      "x" : 49,
+      "y" : 340
+    },
+    "iconTitleGap" : 6,
+    "panelMidX" : 160,
+    "panelSize" : {
+      "height" : 380,
+      "width" : 320,
+      "x" : 0,
+      "y" : 0
+    },
+    "scenario" : "very_long_app_name",
+    "settings" : {
+      "height" : 35,
+      "width" : 28,
+      "x" : 279,
+      "y" : 334
+    },
+    "title" : {
+      "height" : 16,
+      "width" : 198,
+      "x" : 75,
+      "y" : 343
+    }
+  },
+  {
+    "centerDelta" : 0.25,
+    "close" : {
+      "height" : 32,
+      "width" : 28.5,
+      "x" : 13,
+      "y" : 335.5
+    },
+    "group" : {
+      "height" : 22,
+      "width" : 97.5,
+      "x" : 111.5,
+      "y" : 340
+    },
+    "headerCenterY" : 351.5,
+    "icon" : {
+      "height" : 22,
+      "width" : 22,
+      "x" : 111.5,
+      "y" : 340
+    },
+    "iconTitleGap" : 6,
+    "panelMidX" : 160,
+    "panelSize" : {
+      "height" : 380,
+      "width" : 320,
+      "x" : 0,
+      "y" : 0
+    },
+    "scenario" : "no_window",
+    "settings" : {
+      "height" : 35,
+      "width" : 28,
+      "x" : 279,
+      "y" : 334
+    },
+    "title" : {
+      "height" : 16,
+      "width" : 73.5,
+      "x" : 137.5,
+      "y" : 343
+    }
+  }
+]
