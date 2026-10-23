@@ -1,10 +1,10 @@
 # Gridlet
 
-**Alpha.** A tiny native macOS utility: hit your shortcut, drag a rectangle on a grid, and the window you were just using snaps to that portion of the screen.
+**Alpha.** A tiny native macOS utility: hit your shortcut, drag a rectangle on a grid, and the window you were just using snaps to that portion of the screen. A replacement for Divvy on current macOS.
 
 No tiling-manager dashboards, no window rules, no config files. One grid, one gesture.
 
-> Gridlet is an independent open-source project inspired by the *documented behaviour* of [Divvy](https://mizage.com/help/divvy/user_guide.html). It contains no Divvy code or assets, and is not affiliated with Mizage.
+> **Why this exists.** I used [Divvy](https://mizage.com/divvy/) for years and loved it — one grid, one drag, done. It no longer works for me on recent macOS releases, and nothing else had that same simplicity. So Gridlet is a from-scratch reimplementation of the workflow, written against Divvy's documented behaviour. It contains no Divvy code or assets and is not affiliated with Mizage — all credit for the original idea goes to its author.
 
 ![Gridlet panel](docs/media/hero.png)
 
@@ -13,6 +13,16 @@ No tiling-manager dashboards, no window rules, no config files. One grid, one ge
 ![Idle and drag states](docs/media/states.png)
 
 ![Gridlet settings](docs/media/settings.png)
+
+### In use
+
+![Gridlet in use](media/gridlet-demo.gif)
+
+*Real screen recording (no mock-ups): focus a window, press the shortcut, drag on the grid, release. [Full-quality MP4](media/gridlet-demo.mp4).*
+
+| Dragging a selection | Result |
+|---|---|
+| ![Dragging](media/gridlet-dragging.png) | ![Two windows tiled](media/gridlet-two-windows.png) |
 
 ## Status: alpha
 
