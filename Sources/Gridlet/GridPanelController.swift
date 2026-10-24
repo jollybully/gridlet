@@ -663,8 +663,13 @@ final class PanelCoordinator: NSObject {
     }
 
 
-    /// Sends the captured window to another Space, keeping its frame. The Space axis is
-    /// a click; the grid keeps every drag gesture to itself.
+    /// Sends the captured window to another Space, keeping its frame. The Space axis is a
+    /// click; the grid keeps every drag gesture to itself.
+    ///
+    /// SkyLight cannot move another app's window (verified: it only acts on windows owned by
+    /// the calling process), so this performs the gesture a user would: focus click, drag the
+    /// title bar to the screen edge, hold while macOS switches Space, release. That takes ~2s,
+    /// so it runs off the main thread with the panel already dismissed.
     func send(windowTo space: ManagedSpace, on screen: NSScreen, follow: Bool) {
         SpaceStripView.log("send requested: space \(space.index) id=\(space.id) current=\(space.isCurrent)")
 
@@ -684,35 +689,91 @@ final class PanelCoordinator: NSObject {
             panels[screen]?.showError(WindowTargetError.stale.errorDescription ?? "No target window")
             return
         }
-        guard SpaceBridge.isAvailable, let windowID = SpaceBridge.windowID(for: target) else {
-            SpaceStripView.log("no CGWindowID for the target (spaces=\(SpaceBridge.isAvailable))")
-            panels[screen]?.showError("This build can't move windows between Spaces.")
+        guard EdgeDragSpaceMover.isSupported else {
+            SpaceStripView.log("moving between Spaces is not possible on this system")
+            panels[screen]?.showError("This Mac won't let Gridlet move windows between Spaces.")
             return
         }
 
-        let origin = SpaceBridge.spaceID(forWindow: windowID)
-        SpaceStripView.log("window \(windowID) origin=\(origin.map(String.init) ?? "nil")")
-        guard SpaceBridge.move(window: windowID, to: space.id) else {
-            SpaceStripView.log("move failed for window \(windowID) -> \(space.id)")
-            panels[screen]?.showError(SpaceStripModel.errorMessage(spaceIndex: space.index))
-            return
-        }
-        SpaceStripView.log("moved window \(windowID) to space \(space.id)")
-        dismissAll(reason: .applied)
-
-        if follow, let displayIdentifier = SpaceBridge.displayIdentifier(for: screen) {
-            _ = SpaceBridge.switchTo(spaceID: space.id, displayIdentifier: displayIdentifier)
-        }
-
+        let origin = SpaceBridge.spaces(for: screen).first(where: \.isCurrent)
         let appName = WindowTargetResolver.appDisplayName(for: target)
-        let canUndo = origin != nil
-        SendToastController.shared.present(
-            SpaceStripModel.sendMessage(appName: appName, spaceIndex: space.index),
-            on: screen,
-            undo: canUndo ? {
-                _ = SpaceBridge.move(window: windowID, to: origin!)
-            } : nil
-        )
+        let destinationIndex = space.index
+        guard EdgeDragSpaceMover.plan(target: target, to: space, on: screen) != nil else {
+            SpaceStripView.log("could not plan the move")
+            panels[screen]?.showError(SpaceStripModel.errorMessage(spaceIndex: destinationIndex))
+            return
+        }
+
+        dismissAll(reason: .applied)
+        SpaceStripView.log("dragging window of \(appName) to space \(space.id)")
+
+        // The drag switches the desktop along with the window, and a single hold can carry it
+        // past the destination, so retry the remainder and then put the desktop back where
+        // the user left it.
+        func attempt(_ remaining: Int) {
+            guard let plan = EdgeDragSpaceMover.plan(target: target, to: space, on: screen) else {
+                finish(success: false, appName: appName, index: destinationIndex, screen: screen, origin: origin, target: target, follow: follow)
+                return
+            }
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = EdgeDragSpaceMover.execute(plan)
+                DispatchQueue.main.async {
+                    if result.landed {
+                        finish(success: true, appName: appName, index: destinationIndex, screen: screen, origin: origin, target: target, follow: follow)
+                    } else if remaining > 1 {
+                        SpaceStripView.log("attempt failed (window on \(result.windowSpace.map(String.init) ?? "nil")), retrying")
+                        attempt(remaining - 1)
+                    } else {
+                        finish(success: false, appName: appName, index: destinationIndex, screen: screen, origin: origin, target: target, follow: follow)
+                    }
+                }
+            }
+        }
+
+        func finish(
+            success: Bool,
+            appName: String,
+            index: Int,
+            screen: NSScreen,
+            origin: ManagedSpace?,
+            target: WindowTarget,
+            follow: Bool
+        ) {
+            SpaceStripView.log("move finished ok=\(success)")
+            if follow, success, let identifier = SpaceBridge.displayIdentifier(for: screen) {
+                _ = SpaceBridge.switchTo(spaceID: space.id, displayIdentifier: identifier)
+            } else if let origin, let identifier = SpaceBridge.displayIdentifier(for: screen) {
+                // Dragging to the edge took the desktop with it; come back to where you were.
+                _ = SpaceBridge.switchTo(spaceID: origin.id, displayIdentifier: identifier)
+            }
+            guard success else {
+                SendToastController.shared.present(
+                    "Couldn't move that window to Space \(index)",
+                    on: screen,
+                    undo: nil
+                )
+                return
+            }
+            SendToastController.shared.present(
+                SpaceStripModel.sendMessage(appName: appName, spaceIndex: index),
+                on: screen,
+                undo: origin.map { originSpace in
+                    {
+                        guard let back = EdgeDragSpaceMover.plan(target: target, to: originSpace, on: screen) else { return }
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            _ = EdgeDragSpaceMover.execute(back)
+                            DispatchQueue.main.async {
+                                if let identifier = SpaceBridge.displayIdentifier(for: screen) {
+                                    _ = SpaceBridge.switchTo(spaceID: originSpace.id, displayIdentifier: identifier)
+                                }
+                            }
+                        }
+                    }
+                }
+            )
+        }
+
+        attempt(3)
     }
 
     func openSettings() {

@@ -6,14 +6,28 @@ import Foundation
 /// Moves a window belonging to *another* application into a different Space.
 ///
 /// SkyLight's `SLSMoveWindowsToManagedSpace` (and the remove/add primitives) only act on
-/// windows owned by the calling process — verified: Gridlet's own window moves, a TextEdit
-/// window stays put, and AX exposes no space attribute. The remaining public path is the
-/// gesture a human performs: grab the title bar, drag to the screen edge, hold while macOS
-/// switches Spaces, release. That needs only Accessibility (event posting), no injection
-/// into Dock and no SIP changes.
-@MainActor
+/// windows owned by the calling process, and AX exposes no space attribute, so the only
+/// public path is the gesture a human performs: grab the title bar, drag to the screen edge,
+/// hold while macOS switches Spaces, release. That needs Accessibility (event posting) only —
+/// no injection into Dock, no SIP changes.
+///
+/// `plan(...)` gathers everything on the main actor; `execute(plan)` blocks for a couple of
+/// seconds while the drag runs, so callers dispatch it off the main thread.
 enum EdgeDragSpaceMover {
     static let logPath = "/tmp/gridlet-space-send.log"
+
+    struct Plan {
+        let windowID: CGWindowID
+        let element: AXUIElement
+        let pid: pid_t
+        let hops: Int
+        let edgeX: CGFloat
+        let grabPoint: CGPoint
+        let destinationSpaceID: UInt64
+        let currentSpaceID: UInt64
+        let originalFrame: CGRect
+        let holdTimeout: TimeInterval
+    }
 
     static func log(_ line: String) {
         let data = Data((line + "\n").utf8)
@@ -23,6 +37,10 @@ enum EdgeDragSpaceMover {
         } else {
             try? data.write(to: url)
         }
+    }
+
+    static var isSupported: Bool {
+        SpaceBridge.isAvailable && AXIsProcessTrusted()
     }
 
     private static func post(_ type: CGEventType, at point: CGPoint) {
@@ -36,6 +54,99 @@ enum EdgeDragSpaceMover {
         event.post(tap: .cghidEventTap)
     }
 
+    @MainActor
+    static func plan(
+        target: WindowTarget,
+        to space: ManagedSpace,
+        on screen: NSScreen,
+        holdTimeout: TimeInterval = 2.5
+    ) -> Plan? {
+        guard SpaceBridge.isAvailable else {
+            log("spaces unavailable")
+            return nil
+        }
+        let spaces = SpaceBridge.spaces(for: screen)
+        guard let destination = spaces.first(where: { $0.id == space.id }),
+              let current = spaces.first(where: \.isCurrent)
+        else {
+            log("cannot resolve spaces (target \(space.id))")
+            return nil
+        }
+        let hops = destination.index - current.index
+        guard hops != 0 else { return nil }
+        guard let windowID = SpaceBridge.windowID(for: target),
+              var originalFrame = WindowTargetResolver.readBackAXFrame(target),
+              var bounds = WindowTargetResolver.screenAXBounds(nearest: originalFrame)
+        else {
+            log("cannot read window id, frame or screen bounds")
+            return nil
+        }
+
+        // A window hanging off the screen gives no usable title bar and no travel; bring it
+        // back on screen first, and treat that position as the frame to restore.
+        if !bounds.contains(originalFrame) {
+            var centre = CGPoint(
+                x: bounds.midX - originalFrame.width / 2,
+                y: bounds.midY - originalFrame.height / 2
+            )
+            if let value = AXValueCreate(.cgPoint, &centre) {
+                AXUIElementSetAttributeValue(target.axElement, kAXPositionAttribute as CFString, value)
+                usleep(120_000)
+            }
+            if let refreshed = WindowTargetResolver.readBackAXFrame(target) {
+                originalFrame = refreshed
+                if let refreshedBounds = WindowTargetResolver.screenAXBounds(nearest: refreshed) {
+                    bounds = refreshedBounds
+                }
+                log("pulled off-screen window back to \(refreshed.origin)")
+            }
+        }
+        // Park the pointer on the physical edge: the switch only arms within a pixel of it.
+        let edgeX: CGFloat = hops > 0 ? bounds.maxX - 0.5 : bounds.minX + 0.5
+        // Grab the window's own title bar (never a point outside it, or the drag takes hold
+        // of nothing), inside the screen.
+        var grabX = min(max(originalFrame.midX, originalFrame.minX + 80), originalFrame.maxX - 80)
+        grabX = min(max(grabX, bounds.minX + 60), bounds.maxX - 60)
+        // A window already flush against the target edge leaves no travel, so nudge it away
+        // first; the original frame is restored after the move either way.
+        if abs(grabX - edgeX) < 220, let element = Optional(target.axElement) {
+            var nudged = originalFrame.origin
+            nudged.x = hops > 0 ? max(bounds.minX, edgeX - 600) : min(bounds.maxX - originalFrame.width, edgeX + 600)
+            if var point = Optional(nudged) {
+                if let value = AXValueCreate(.cgPoint, &point) {
+                    AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, value)
+                    usleep(120_000)
+                    if let moved = WindowTargetResolver.readBackAXFrame(target) {
+                        log("nudged window to \(moved.origin) for travel")
+                        grabX = min(max(moved.midX, moved.minX + 80), moved.maxX - 80)
+                        grabX = min(max(grabX, bounds.minX + 60), bounds.maxX - 60)
+                    }
+                }
+            }
+        }
+        let grabPoint = CGPoint(
+            x: grabX,
+            y: min(max(originalFrame.minY + 12, bounds.minY + 4), bounds.maxY - 4)
+        )
+        log("plan grab=\(grabPoint) edgeX=\(edgeX) hops=\(hops) destination=\(destination.index) frame=\(originalFrame)")
+        return Plan(
+            windowID: windowID,
+            element: target.axElement,
+            pid: target.pid,
+            hops: hops,
+            edgeX: edgeX,
+            grabPoint: grabPoint,
+            destinationSpaceID: destination.id,
+            currentSpaceID: current.id,
+            originalFrame: originalFrame,
+            holdTimeout: holdTimeout
+        )
+    }
+
+    struct Result {
+        let landed: Bool
+        let windowSpace: UInt64?
+    }
 
     private static func postCtrlArrow(_ key: CGKeyCode) {
         let source = CGEventSource(stateID: .hidSystemState)
@@ -43,143 +154,98 @@ enum EdgeDragSpaceMover {
             down.flags = .maskControl
             down.post(tap: .cghidEventTap)
         }
-        usleep(30_000)
+        usleep(40_000)
         if let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) {
             up.flags = .maskControl
             up.post(tap: .cghidEventTap)
         }
     }
 
-    private static func currentSpaceID(for screen: NSScreen) -> UInt64? {
-        SpaceBridge.spaces(for: screen).first(where: \.isCurrent)?.id
-    }
-
-    /// Returns true when the window's Space membership actually changed.
-    static func send(target: WindowTarget, to spaceID: UInt64, on screen: NSScreen, hopsTimeout: TimeInterval = 3.0) -> Bool {
-        guard SpaceBridge.isAvailable else {
-            log("spaces unavailable")
-            return false
-        }
-        let spaces = SpaceBridge.spaces(for: screen)
-        guard let destination = spaces.first(where: { $0.id == spaceID }),
-              let current = spaces.first(where: \.isCurrent)
-        else {
-            log("cannot resolve spaces (target \(spaceID))")
-            return false
-        }
-        let hops = destination.index - current.index
-        guard hops != 0 else { return true }
-
-        guard let windowID = SpaceBridge.windowID(for: target) else {
-            log("no CGWindowID")
-            return false
-        }
-        guard let originalFrame = WindowTargetResolver.readBackAXFrame(target) else {
-            log("cannot read window frame")
-            return false
-        }
-        guard let bounds = WindowTargetResolver.screenAXBounds(nearest: originalFrame) else {
-            log("cannot resolve screen bounds")
-            return false
-        }
-
-        // Grab the title bar far enough from the target edge that the drag is a real drag,
-        // not a click: a window already hanging off the screen edge gives no travel at all.
-        let edgeX: CGFloat = hops > 0 ? bounds.maxX - 2 : bounds.minX + 2
-        let inset: CGFloat = 420
-        let grabX: CGFloat = hops > 0
-            ? min(max(originalFrame.midX, bounds.minX + 80), edgeX - inset)
-            : max(min(originalFrame.midX, bounds.maxX - 80), bounds.minX + inset)
-        let grab = CGPoint(x: grabX, y: originalFrame.minY + 12)
-        let edge = CGPoint(x: edgeX, y: grab.y)
-        // If the title bar is off-screen at that x, fall back to the top edge of the window.
-        let grabPoint = CGPoint(
-            x: min(max(grab.x, bounds.minX + 40), bounds.maxX - 40),
-            y: min(max(grab.y, bounds.minY + 6), bounds.maxY - 6)
-        )
-        log("drag start grab=\(grabPoint) edge=\(edge) hops=\(hops) target=\(destination.index) frame=\(originalFrame)")
-
-        // A background app's first click only activates the target; do that explicitly
-        // first so the drag itself is not swallowed by the activation click.
-        NSRunningApplication(processIdentifier: target.pid)?.activate(options: [])
-        usleep(300_000)
-
-        CGWarpMouseCursorPosition(grabPoint)
+    /// Blocks for a couple of seconds: dispatch this off the main thread.
+    ///
+    /// While a window is being dragged, ⌃←/⌃→ moves *that window* one Space, which is the only
+    /// way to get single-Space granularity here: holding at the screen edge moves it two
+    /// Spaces per hold on this machine (animations off), so odd offsets are unreachable.
+    @discardableResult
+    static func execute(_ plan: Plan) -> Result {
+        // 1. Focus click. A press on an inactive window's title bar only activates the app,
+        //    so a drag starting there gets swallowed.
+        NSRunningApplication(processIdentifier: plan.pid)?.activate(options: [])
+        usleep(320_000)
+        CGWarpMouseCursorPosition(plan.grabPoint)
         CGAssociateMouseAndMouseCursorPosition(1)
-        usleep(100_000)
-        post(.leftMouseDown, at: grabPoint)
+        usleep(140_000)
+        post(.leftMouseDown, at: plan.grabPoint)
+        usleep(60_000)
+        post(.leftMouseUp, at: plan.grabPoint)
+        usleep(200_000)
+
+        // 2. Start a real drag: press, then move a little so the window is "in hand".
+        post(.leftMouseDown, at: plan.grabPoint)
         usleep(110_000)
-        // Two tiny moves first: some apps ignore a drag that starts already moving fast.
-        post(.leftMouseDragged, at: CGPoint(x: grabPoint.x + 3, y: grabPoint.y))
-        usleep(40_000)
-        post(.leftMouseDragged, at: CGPoint(x: grabPoint.x + 9, y: grabPoint.y))
-        usleep(40_000)
-
-        // Walk to the edge in small steps so the drag is registered as a real drag.
-        let steps = 18
-        let startX = grabPoint.x
-        for step in 1...steps {
-            let progress = CGFloat(step) / CGFloat(steps)
-            let point = CGPoint(x: startX + (edgeX - startX) * progress, y: grab.y)
+        let direction: CGFloat = plan.hops > 0 ? 1 : -1
+        for step in 1...8 {
+            let point = CGPoint(x: plan.grabPoint.x + direction * CGFloat(step) * 12, y: plan.grabPoint.y)
             post(.leftMouseDragged, at: point)
-            usleep(22_000)
+            usleep(20_000)
+        }
+        let grabbed = SpaceBridge.spaceID(forWindow: plan.windowID)
+        log("drag in hand: windowSpace=\(grabbed.map(String.init) ?? "nil")")
+
+        // 3. Step one Space at a time with ⌃←/⌃→, checking after each press.
+        let arrow: CGKeyCode = plan.hops > 0 ? 124 : 123 // right / left
+        let maxPresses = abs(plan.hops) + 3
+        var presses = 0
+        var space = grabbed
+        while presses < maxPresses, space != plan.destinationSpaceID {
+            postCtrlArrow(arrow)
+            presses += 1
+            usleep(260_000)
+            space = SpaceBridge.spaceID(forWindow: plan.windowID)
+            log("press \(presses) -> windowSpace=\(space.map(String.init) ?? "nil")")
         }
 
-        let frameMidDrag = WindowTargetResolver.readBackAXFrame(target)
-        log("frame before=\(originalFrame) mid=\(frameMidDrag.map { "\($0)" } ?? "nil")")
-
-        // While a window is being dragged, ⌃←/⌃→ carries it to the neighbouring Space.
-        // That is far more reliable than holding at the screen edge, which this Mac does
-        // not act on at all (verified: 3s of holding at 2px from the edge, no switch).
-        var switches = 0
-        var tick = 0
-        let hopDeadline = Date().addingTimeInterval(hopsTimeout)
-        var lastSwitch = Date()
-        var currentNow = currentSpaceID(for: screen)
-        let arrowKey: CGKeyCode = hops > 0 ? 124 : 123 // right / left
-        while Date() < hopDeadline {
-            // Tiny jitter keeps the drag alive between key presses.
-            post(.leftMouseDragged, at: CGPoint(x: edgeX, y: grabPoint.y + (tick % 2 == 0 ? 1 : -1)))
-            usleep(70_000)
-            if Date().timeIntervalSince(lastSwitch) > 0.45 {
-                lastSwitch = Date()
-                postCtrlArrow(arrowKey)
+        // 4. If the keyboard route did nothing, fall back to the edge hold.
+        if space != plan.destinationSpaceID, presses > 0, space == grabbed {
+            log("keyboard stepping had no effect, falling back to edge hold")
+            let steps = 26
+            for step in 1...steps {
+                let progress = CGFloat(step) / CGFloat(steps)
+                let point = CGPoint(x: plan.grabPoint.x + (plan.edgeX - plan.grabPoint.x) * progress, y: plan.grabPoint.y)
+                post(.leftMouseDragged, at: point)
+                usleep(20_000)
             }
-            currentNow = currentSpaceID(for: screen)
-            tick += 1
-            if tick % 8 == 0 {
-                let f = WindowTargetResolver.readBackAXFrame(target)
-                log("tick \(tick) cursor=(\(edgeX),\(grab.y)) frame=\(f.map { "\($0.origin)" } ?? "nil") space=\(currentNow.map(String.init) ?? "nil")")
-            }
-            if let currentNow, currentNow != current.id, currentNow == spaceID {
-                break
-            }
-            if let currentNow, currentNow != current.id, Date().timeIntervalSince(lastSwitch) > 0.4 {
-                switches += 1
-                lastSwitch = Date()
-                log("intermediate space \(currentNow)")
-                if switches >= hops + 2 { break }
-            }
+            let dwell = 0.30
+            usleep(useconds_t(dwell * 1_000_000))
+            log("held at edge for \(String(format: "%.2f", dwell))s")
+            space = SpaceBridge.spaceID(forWindow: plan.windowID)
         }
 
-        post(.leftMouseUp, at: CGPoint(x: edgeX, y: grabPoint.y))
-        CGWarpMouseCursorPosition(CGPoint(x: originalFrame.midX, y: originalFrame.minY + 12))
-        usleep(120_000)
+        post(.leftMouseUp, at: CGPoint(x: plan.grabPoint.x + direction * 96, y: plan.grabPoint.y))
+        usleep(250_000)
+        CGWarpMouseCursorPosition(CGPoint(x: plan.originalFrame.midX, y: plan.originalFrame.minY + 12))
+        usleep(150_000)
 
-        let landed = SpaceBridge.spaceID(forWindow: windowID) == spaceID
-        log("landed=\(landed) windowSpace=\(SpaceBridge.spaceID(forWindow: windowID).map(String.init) ?? "nil")")
+        let landed = SpaceBridge.spaceID(forWindow: plan.windowID) == plan.destinationSpaceID
+        log("landed=\(landed) windowSpace=\(SpaceBridge.spaceID(forWindow: plan.windowID).map(String.init) ?? "nil") presses=\(presses)")
 
-        if landed {
-            // The drag leaves the window wherever the pointer released; put it back.
-            _ = try? WindowTargetResolver.applyFrame(target, axFrame: originalFrame)
-            log("frame restored to \(originalFrame)")
+        // The drag parks the window where the pointer released. Restore the frame whatever
+        // happened: a failed attempt must not leave the window displaced.
+        var origin = plan.originalFrame.origin
+        var size = plan.originalFrame.size
+        if let value = AXValueCreate(.cgPoint, &origin) {
+            AXUIElementSetAttributeValue(plan.element, kAXPositionAttribute as CFString, value)
         }
-        return landed
+        if let value = AXValueCreate(.cgSize, &size) {
+            AXUIElementSetAttributeValue(plan.element, kAXSizeAttribute as CFString, value)
+        }
+        log("frame restored to \(plan.originalFrame)")
+        return Result(landed: landed, windowSpace: SpaceBridge.spaceID(forWindow: plan.windowID))
     }
 }
 
-/// `--space-send <index>`: drives the real edge-drag mover against the frontmost window and
-/// logs the result, so the gesture path can be verified without clicking anything.
+/// `--space-send <index>`: drives the real mover against the frontmost window and logs the
+/// result, so the gesture path can be verified without clicking anything.
 @MainActor
 enum SpaceSendProbe {
     static func run(spaceIndex: Int) {
@@ -200,8 +266,21 @@ enum SpaceSendProbe {
         }
         let name = WindowTargetResolver.appDisplayName(for: target)
         EdgeDragSpaceMover.log("PROBE sending \(name) to space \(destination.index) (id \(destination.id))")
+        guard let plan = EdgeDragSpaceMover.plan(target: target, to: destination, on: screen) else {
+            EdgeDragSpaceMover.log("PROBE could not build a plan")
+            return
+        }
         let started = Date()
-        let ok = EdgeDragSpaceMover.send(target: target, to: destination.id, on: screen)
-        EdgeDragSpaceMover.log("PROBE result ok=\(ok) elapsed=\(String(format: "%.2f", Date().timeIntervalSince(started)))s")
+        var landed = false
+        for attempt in 1...6 {
+            guard let plan = EdgeDragSpaceMover.plan(target: target, to: destination, on: screen) else { break }
+            let result = EdgeDragSpaceMover.execute(plan)
+            EdgeDragSpaceMover.log("PROBE attempt \(attempt) landed=\(result.landed) space=\(result.windowSpace.map(String.init) ?? "nil")")
+            if result.landed {
+                landed = true
+                break
+            }
+        }
+        EdgeDragSpaceMover.log("PROBE result ok=\(landed) elapsed=\(String(format: "%.2f", Date().timeIntervalSince(started)))s")
     }
 }

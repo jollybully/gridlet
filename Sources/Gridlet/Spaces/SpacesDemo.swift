@@ -76,27 +76,52 @@ enum SpacesDemo {
         log("DEMO_MODE sending \(WindowTargetResolver.appDisplayName(for: target)) to Space \(spaceIndex)")
 
         // Hold the panel on screen long enough to be seen, then send.
+        let originID = SpaceBridge.spaces(for: screen).first(where: \.isCurrent)?.id
+        let destinationID = space.id
+        let destinationIndex = space.index
+        let displayIdentifier = SpaceBridge.displayIdentifier(for: screen) ?? "Main"
+        let windowNumber = windowID
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
             coordinator.send(windowTo: space, on: screen, follow: false)
-            let after = windowID.flatMap { SpaceBridge.spaceID(forWindow: $0) }
-            log("DEMO_RESULT window space now \(after.map(String.init) ?? "unknown") (wanted \(space.id))")
+            pollForLanding(
+                windowNumber: windowNumber,
+                destinationID: destinationID,
+                destinationIndex: destinationIndex,
+                displayIdentifier: displayIdentifier,
+                originID: originID
+            )
+        }
+    }
 
-            // Show the destination Space briefly, then come back, so the recording proves
-            // the window really is there.
-            let originSpace = SpaceBridge.spaces(for: screen).first(where: \.isCurrent)
-            _ = SpaceBridge.switchTo(spaceID: space.id, displayIdentifier: SpaceBridge.displayIdentifier(for: screen) ?? "Main")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.2) {
-                if let originSpace {
-                    _ = SpaceBridge.switchTo(
-                        spaceID: originSpace.id,
-                        displayIdentifier: SpaceBridge.displayIdentifier(for: screen) ?? "Main"
-                    )
+    /// The move runs off the main thread and takes ~2s; wait for the window to actually
+    /// arrive before switching Spaces to show it, then come back.
+    private static func pollForLanding(
+        windowNumber: CGWindowID?,
+        destinationID: UInt64,
+        destinationIndex: Int,
+        displayIdentifier: String,
+        originID: UInt64?
+    ) {
+        let deadline = Date().addingTimeInterval(6)
+        func tick() {
+            let landed = windowNumber.flatMap { SpaceBridge.spaceID(forWindow: $0) }
+            guard landed == destinationID || Date() > deadline else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: tick)
+                return
+            }
+            log("DEMO_RESULT window space now \(landed.map(String.init) ?? "unknown") (wanted \(destinationID))")
+            _ = SpaceBridge.switchTo(spaceID: destinationID, displayIdentifier: displayIdentifier)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.4) {
+                if let originID {
+                    _ = SpaceBridge.switchTo(spaceID: originID, displayIdentifier: displayIdentifier)
                 }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    log("DEMO_DONE")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                    log("DEMO_DONE space \(destinationIndex)")
                     exit(0)
                 }
             }
         }
+        tick()
     }
 }
