@@ -106,71 +106,99 @@ final class SpacesTests: XCTestCase {
         XCTAssertFalse(strip.isCurrentHighlightedOnly)
     }
 
-    private func makeChip(_ space: ManagedSpace) -> (SpaceChipView, NSWindow) {
+    private func makeStrip(_ spaces: [ManagedSpace]) -> (SpaceStripView, NSWindow) {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 120, height: SpaceChipView.height),
+            contentRect: NSRect(x: 0, y: 0, width: 280, height: PanelMetrics.spaceStripHeight),
             styleMask: [.borderless], backing: .buffered, defer: false
         )
-        let chip = SpaceChipView(space: space)
-        chip.frame = NSRect(x: 0, y: 0, width: 120, height: SpaceChipView.height)
-        window.contentView?.addSubview(chip)
+        let strip = SpaceStripView(frame: NSRect(x: 0, y: 0, width: 280, height: PanelMetrics.spaceStripHeight))
+        window.contentView?.addSubview(strip)
+        NSLayoutConstraint.activate([
+            strip.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor),
+            strip.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor),
+            strip.topAnchor.constraint(equalTo: window.contentView!.topAnchor),
+            strip.heightAnchor.constraint(equalToConstant: PanelMetrics.spaceStripHeight),
+        ])
+        strip.configure(spaces: spaces)
         window.layoutIfNeeded()
-        return (chip, window)
+        strip.layoutSubtreeIfNeeded()
+        return (strip, window)
     }
 
-    private func click(_ chip: SpaceChipView, in window: NSWindow, modifiers: NSEvent.ModifierFlags = []) {
-        let point = chip.convert(NSPoint(x: chip.bounds.midX, y: chip.bounds.midY), to: nil)
+    private func clickStrip(_ strip: SpaceStripView, in window: NSWindow, atStripPoint point: NSPoint, modifiers: NSEvent.ModifierFlags = []) {
+        let windowPoint = strip.convert(point, to: nil)
         for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
             let event = NSEvent.mouseEvent(
-                with: type, location: point, modifierFlags: modifiers, timestamp: 0,
+                with: type, location: windowPoint, modifierFlags: modifiers, timestamp: 0,
                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0
             )!
-            type == .leftMouseDown ? chip.mouseDown(with: event) : chip.mouseUp(with: event)
+            type == .leftMouseDown ? strip.mouseDown(with: event) : strip.mouseUp(with: event)
         }
     }
 
-    func testClickingChipReportsSpace() {
-        let space = ManagedSpace(id: 5, index: 3, isCurrent: false, windowCount: nil)
-        let (chip, window) = makeChip(space)
+    func testStripHitTestingMapsPointsToChips() {
+        let (strip, window) = makeStrip(spacesFixture())
+        let frames = strip.chipFrames()
+        XCTAssertEqual(frames.count, 3)
+        guard frames.count == 3, frames.allSatisfy({ $0.width > 1 }) else {
+            return XCTFail("chips did not lay out: \(frames)")
+        }
+        for (index, frame) in frames.enumerated() {
+            XCTAssertEqual(strip.chipIndex(at: NSPoint(x: frame.midX, y: frame.midY)), index)
+        }
+        XCTAssertNil(strip.chipIndex(at: NSPoint(x: -10, y: 15)), "points outside the strip hit nothing")
+        XCTAssertTrue(window.contentView?.subviews.contains(strip) ?? false)
+    }
+
+    func testClickingStripChipSendsThatSpace() {
+        let (strip, window) = makeStrip(spacesFixture())
         var received: [(ManagedSpace, Bool)] = []
-        chip.onActivate = { received.append(($0, $1)) }
+        strip.onSelect = { received.append(($0, $1)) }
+        let third = strip.chipFrames()[2]
 
-        click(chip, in: window)
+        clickStrip(strip, in: window, atStripPoint: NSPoint(x: third.midX, y: third.midY))
 
-        XCTAssertEqual(received.count, 1)
-        XCTAssertEqual(received.first?.0.id, 5)
+        XCTAssertEqual(received.count, 1, "a click on a chip must reach onSelect")
+        XCTAssertEqual(received.first?.0.id, 5, "third chip is Space 3")
         XCTAssertEqual(received.first?.1, false, "plain click sends without following")
     }
 
-    func testOptionClickAsksToFollow() {
-        let space = ManagedSpace(id: 5, index: 3, isCurrent: false, windowCount: nil)
-        let (chip, window) = makeChip(space)
+    func testOptionClickingStripChipAsksToFollow() {
+        let (strip, window) = makeStrip(spacesFixture())
         var follow: Bool?
-        chip.onActivate = { _, f in follow = f }
+        strip.onSelect = { _, f in follow = f }
+        let first = strip.chipFrames()[0]
 
-        click(chip, in: window, modifiers: [.option])
+        clickStrip(strip, in: window, atStripPoint: NSPoint(x: first.midX, y: first.midY), modifiers: [.option])
 
         XCTAssertEqual(follow, true)
     }
 
-    func testCurrentChipIgnoresClicks() {
-        let (chip, window) = makeChip(ManagedSpace(id: 4, index: 1, isCurrent: true, windowCount: nil))
+    func testClickingCurrentSpaceChipIsIgnored() {
+        let (strip, window) = makeStrip(spacesFixture())
         var clicks = 0
-        chip.onActivate = { _, _ in clicks += 1 }
+        strip.onSelect = { _, _ in clicks += 1 }
+        let current = strip.chipFrames()[1] // Space 2 in the fixture is current
 
-        click(chip, in: window)
+        clickStrip(strip, in: window, atStripPoint: NSPoint(x: current.midX, y: current.midY))
 
         XCTAssertEqual(clicks, 0, "sending a window to the Space it is already on is a no-op")
     }
 
-    func testClickOutsideChipIsIgnored() {
-        let (chip, window) = makeChip(ManagedSpace(id: 5, index: 3, isCurrent: false, windowCount: nil))
+    func testReleaseOutsideChipsIsIgnored() {
+        let (strip, window) = makeStrip(spacesFixture())
         var clicks = 0
-        chip.onActivate = { _, _ in clicks += 1 }
-        let outside = NSPoint(x: -50, y: -50)
-        chip.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: outside, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!)
-        chip.mouseUp(with: NSEvent.mouseEvent(with: .leftMouseUp, location: outside, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!)
-        XCTAssertEqual(clicks, 0, "dragging off the chip before releasing must cancel")
+        strip.onSelect = { _, _ in clicks += 1 }
+        let chip = strip.chipFrames()[2]
+
+        clickStrip(strip, in: window, atStripPoint: NSPoint(x: chip.midX, y: chip.midY))
+        // A second press that releases well outside the strip must not fire again.
+        let outside = NSPoint(x: strip.bounds.midX, y: strip.bounds.maxY + 80)
+        let windowPoint = strip.convert(outside, to: nil)
+        strip.mouseDown(with: NSEvent.mouseEvent(with: .leftMouseDown, location: windowPoint, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!)
+        strip.mouseUp(with: NSEvent.mouseEvent(with: .leftMouseUp, location: windowPoint, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)!)
+
+        XCTAssertEqual(clicks, 1, "only the first click counts")
     }
 
     // MARK: - Panel geometry

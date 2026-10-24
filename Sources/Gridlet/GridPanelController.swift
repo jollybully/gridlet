@@ -666,27 +666,39 @@ final class PanelCoordinator: NSObject {
     /// Sends the captured window to another Space, keeping its frame. The Space axis is
     /// a click; the grid keeps every drag gesture to itself.
     func send(windowTo space: ManagedSpace, on screen: NSScreen, follow: Bool) {
-        // Same dismissal contract as a resize commit: the panel always goes away.
-        defer { dismissAll(reason: .applied) }
+        SpaceStripView.log("send requested: space \(space.index) id=\(space.id) current=\(space.isCurrent)")
 
-        if uiSmokeMode || snapshotDisplayMode != nil { return }
-
+        if uiSmokeMode || snapshotDisplayMode != nil {
+            dismissAll(reason: .applied)
+            return
+        }
+        guard !space.isCurrent else { // already there: no-op, not an error
+            SpaceStripView.log("space is the current one, nothing to do")
+            dismissAll(reason: .applied)
+            return
+        }
+        // On failure keep the panel up so the error is actually readable: a dismiss here
+        // made every failure look like "the click did nothing".
         guard let target = capturedTarget, WindowTargetResolver.isStillValid(target) else {
+            SpaceStripView.log("no valid target window")
             panels[screen]?.showError(WindowTargetError.stale.errorDescription ?? "No target window")
             return
         }
-        guard !space.isCurrent else { return } // already there: no-op, not an error
-
         guard SpaceBridge.isAvailable, let windowID = SpaceBridge.windowID(for: target) else {
+            SpaceStripView.log("no CGWindowID for the target (spaces=\(SpaceBridge.isAvailable))")
             panels[screen]?.showError("This build can't move windows between Spaces.")
             return
         }
 
         let origin = SpaceBridge.spaceID(forWindow: windowID)
+        SpaceStripView.log("window \(windowID) origin=\(origin.map(String.init) ?? "nil")")
         guard SpaceBridge.move(window: windowID, to: space.id) else {
+            SpaceStripView.log("move failed for window \(windowID) -> \(space.id)")
             panels[screen]?.showError(SpaceStripModel.errorMessage(spaceIndex: space.index))
             return
         }
+        SpaceStripView.log("moved window \(windowID) to space \(space.id)")
+        dismissAll(reason: .applied)
 
         if follow, let displayIdentifier = SpaceBridge.displayIdentifier(for: screen) {
             _ = SpaceBridge.switchTo(spaceID: space.id, displayIdentifier: displayIdentifier)

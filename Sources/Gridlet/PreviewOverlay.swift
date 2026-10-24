@@ -34,8 +34,8 @@ final class PreviewOverlayWindow: NSWindow {
             uniqueKeysWithValues: Self.nonAnimatedLayerKeys.map { ($0, NSNull()) }
         )
         fillLayer.actions = animationNulls
-        fillLayer.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.22).cgColor
-        fillLayer.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.75).cgColor
+        fillLayer.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.16).cgColor
+        fillLayer.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.60).cgColor
         fillLayer.borderWidth = 1.5
         fillLayer.cornerRadius = 6
         view.layer?.addSublayer(fillLayer)

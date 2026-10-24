@@ -49,6 +49,19 @@ final class SpaceStripView: NSView {
 
     private let stack = NSStackView()
     private var chips: [SpaceChipView] = []
+    /// Diagnostics: the panel cannot log to stdout, so clicks land in a file.
+    static let clickLogPath = "/tmp/gridlet-spaces-click.log"
+
+    static func log(_ line: String) {
+        let entry = "[\(Date().timeIntervalSince1970)] \(line)\n"
+        guard let data = entry.data(using: .utf8) else { return }
+        let url = URL(fileURLWithPath: clickLogPath)
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile(); handle.write(data); try? handle.close()
+        } else {
+            try? data.write(to: url)
+        }
+    }
     private(set) var spaces: [ManagedSpace] = []
 
     var chipCount: Int { chips.count }
@@ -79,13 +92,7 @@ final class SpaceStripView: NSView {
     func configure(spaces: [ManagedSpace]) {
         self.spaces = spaces
         for chip in chips { stack.removeArrangedSubview(chip); chip.removeFromSuperview() }
-        chips = spaces.map { space in
-            let chip = SpaceChipView(space: space)
-            chip.onActivate = { [weak self] space, follow in
-                self?.onSelect?(space, follow)
-            }
-            return chip
-        }
+        chips = spaces.map { SpaceChipView(space: $0) }
         for chip in chips { stack.addArrangedSubview(chip) }
         setAccessibilityLabel("\(spaces.count) Space\(spaces.count == 1 ? "" : "s")")
         needsLayout = true
@@ -93,6 +100,39 @@ final class SpaceStripView: NSView {
 
     func chipFrames() -> [NSRect] {
         chips.map { $0.convert($0.bounds, to: self) }
+    }
+
+    /// Index of the chip containing a point in strip coordinates (nil outside every chip).
+    func chipIndex(at point: NSPoint) -> Int? {
+        chipFrames().firstIndex { $0.contains(point) }
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override var mouseDownCanMoveWindow: Bool { false }
+
+    override func mouseDown(with event: NSEvent) {
+        // Deliberately a click, not a drag: the grid owns every drag gesture.
+        let point = convert(event.locationInWindow, from: nil)
+        if let index = chipIndex(at: point) {
+            chips[index].setHovered(true)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        defer { chips.forEach { $0.setHovered(false) } }
+        guard let index = chipIndex(at: point) else {
+            SpaceStripView.log("strip mouseUp outside chips at \(point)")
+            return
+        }
+        let chip = chips[index]
+        guard chip.chip.isEnabled else {
+            SpaceStripView.log("chip \(chip.chip.index) is the current Space, ignored")
+            return
+        }
+        SpaceStripView.log("chip \(chip.chip.index) clicked option=\(event.modifierFlags.contains(.option))")
+        onSelect?(chip.space, event.modifierFlags.contains(.option))
     }
 
     func chipProtocolNames() -> [String] { chips.map { $0.chip.accessibilityLabel } }
@@ -103,9 +143,6 @@ final class SpaceStripView: NSView {
 final class SpaceChipView: NSControl {
     let space: ManagedSpace
     let chip: SpaceStripModel.Chip
-    /// Click handler; the Bool is "option was held" (send and follow).
-    var onActivate: ((ManagedSpace, Bool) -> Void)?
-
     private var isHovered = false
     private var trackingAreaRef: NSTrackingArea?
 
@@ -143,6 +180,12 @@ final class SpaceChipView: NSControl {
         trackingAreaRef = area
     }
 
+    func setHovered(_ hovered: Bool) {
+        guard chip.isEnabled else { isHovered = false; needsDisplay = true; return }
+        isHovered = hovered
+        needsDisplay = true
+    }
+
     override func mouseEntered(with event: NSEvent) {
         guard chip.isEnabled else { return }
         isHovered = true
@@ -154,25 +197,14 @@ final class SpaceChipView: NSControl {
         needsDisplay = true
     }
 
-    override func mouseDown(with event: NSEvent) {
-        guard chip.isEnabled else { return }
-        // Deliberately a click, not a drag: the grid owns every drag gesture.
-        isHovered = true
-        needsDisplay = true
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        defer {
-            isHovered = false
-            needsDisplay = true
-        }
-        guard chip.isEnabled else { return }
-        let inside = bounds.contains(convert(event.locationInWindow, from: nil))
-        guard inside else { return }
-        onActivate?(space, event.modifierFlags.contains(.option))
-    }
-
     override var mouseDownCanMoveWindow: Bool { false }
+
+    /// The strip owns the mouse: chips are visuals with tracking areas, and returning nil
+    /// here keeps a stray hit-test (or a first-click activation) from swallowing the click
+    /// before it reaches `SpaceStripView`.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     var hoverFillForTesting: NSColor { hoverFill() }
     var idleFillForTesting: NSColor { idleFill() }
