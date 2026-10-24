@@ -106,15 +106,31 @@ final class GridView: NSView {
 
         let sel = currentSelection()
 
+        // The selection is drawn as one continuous rounded block. Filling each cell
+        // separately leaves a lattice of rounded corners inside the highlight, which
+        // reads as bowing or pill-shaped tiles at these sizes.
+        var selectionRect: NSRect?
+        if let sel {
+            let rect = NSRect(
+                x: CGFloat(sel.colStart) * (tw + gap),
+                y: CGFloat(sel.rowStart) * (th + gap),
+                width: CGFloat(sel.colEnd - sel.colStart + 1) * tw + CGFloat(sel.colEnd - sel.colStart) * gap,
+                height: CGFloat(sel.rowEnd - sel.rowStart + 1) * th + CGFloat(sel.rowEnd - sel.rowStart) * gap
+            )
+            selectionRect = rect
+            accent.withAlphaComponent(0.28).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+        }
+
         for row in 0..<rows {
             for col in 0..<columns {
+                if let sel, row >= sel.rowStart, row <= sel.rowEnd, col >= sel.colStart, col <= sel.colEnd {
+                    continue
+                }
                 let rect = tileRect(row: row, col: col)
                 let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
 
-                if let sel, row >= sel.rowStart, row <= sel.rowEnd, col >= sel.colStart, col <= sel.colEnd {
-                    accent.withAlphaComponent(0.28).setFill()
-                    path.fill()
-                } else if let hover = hoverCell, hover.row == row, hover.col == col {
+                if let hover = hoverCell, hover.row == row, hover.col == col {
                     palette.hoverFill.setFill()
                     path.fill()
                     palette.tileEdge.setStroke()
@@ -130,15 +146,10 @@ final class GridView: NSView {
             }
         }
 
-        if let sel {
-            let outer = NSRect(
-                x: CGFloat(sel.colStart) * (tw + gap),
-                y: CGFloat(sel.rowStart) * (th + gap),
-                width: CGFloat(sel.colEnd - sel.colStart + 1) * tw + CGFloat(sel.colEnd - sel.colStart) * gap,
-                height: CGFloat(sel.rowEnd - sel.rowStart + 1) * th + CGFloat(sel.rowEnd - sel.rowStart) * gap
-            )
+        if let sel, let outer = selectionRect {
             accent.setStroke()
-            let outline = NSBezierPath(roundedRect: outer, xRadius: radius + 1.5, yRadius: radius + 1.5)
+            let outline = NSBezierPath(roundedRect: outer.insetBy(dx: 1, dy: 1),
+                                       xRadius: radius, yRadius: radius)
             outline.lineWidth = 2
             outline.stroke()
         }
