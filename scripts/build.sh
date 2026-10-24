@@ -35,8 +35,23 @@ done
 iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns"
 plutil -insert CFBundleIconFile -string AppIcon "$CONTENTS/Info.plist"
 
-echo "==> Ad hoc sign"
-codesign --force --deep --sign - "$APP"
+# Signing identity: a stable self-signed cert keeps the same code requirement across
+# rebuilds, so macOS does not drop Gridlet's Accessibility grant every time. Falls back to
+# ad-hoc when the identity cannot be created (ad-hoc = one manual re-grant per build).
+echo "==> Sign"
+SIGN_IDENTITY=""
+if IDENTITY_LINE="$(./scripts/dev-signing-identity.sh 2>/dev/null)"; then
+  SIGN_IDENTITY="$IDENTITY_LINE"
+fi
+if [ -n "$SIGN_IDENTITY" ]; then
+  echo "    identity: $SIGN_IDENTITY"
+  KEYCHAIN="${GRIDLET_KEYCHAIN:-$HOME/Library/Keychains/gridlet-dev.keychain-db}"
+  security unlock-keychain -p "${GRIDLET_KEYCHAIN_PASSWORD:-gridlet-dev}" "$KEYCHAIN" >/dev/null 2>&1 || true
+  codesign --force --deep --sign "$SIGN_IDENTITY" --keychain "$KEYCHAIN" "$APP"
+else
+  echo "    identity: ad-hoc (Accessibility must be re-granted after each build)"
+  codesign --force --deep --sign - "$APP"
+fi
 codesign --verify --verbose "$APP"
 
 echo "==> plutil lint"

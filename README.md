@@ -40,8 +40,20 @@ which moves a window it owns to another Space, reads the membership back, and re
 
 ```bash
 git clone https://github.com/jollybully/gridlet.git && cd gridlet
-./scripts/build.sh      # tests, release build, ad-hoc sign → dist/
+./scripts/build.sh      # tests, release build, sign → dist/
 ```
+
+`scripts/build.sh` signs with a **stable local identity** (`Gridlet Dev`, created on first
+build by `scripts/dev-signing-identity.sh` in its own throwaway keychain). That matters:
+an ad-hoc signature changes on every build, and macOS silently drops the Accessibility
+grant when it does, so you would have to re-enable the app after each build. A
+certificate keeps the same designated requirement, so the grant survives rebuilds. The
+certificate is self-signed and is **not** added to any system trust settings — it exists
+only to give builds a consistent identity. If creating it fails, the script falls back to
+ad-hoc signing and prints a warning.
+
+The script also adds that keychain to your login keychain search list so `codesign` can
+find the identity without prompting.
 
 ## Notes
 
