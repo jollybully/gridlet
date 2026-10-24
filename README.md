@@ -13,6 +13,11 @@ A tiny macOS window manager. Press your shortcut, drag a rectangle on the grid, 
 3. Right-click → **Open** (ad-hoc signed, so double-click may be blocked once).
 4. Enable Gridlet in **System Settings → Privacy & Security → Accessibility**, then quit and reopen it.
 
+   Rebuilding the app changes its ad-hoc signature, and macOS silently drops the
+   Accessibility grant when that happens. After `./scripts/build.sh` (or any manual build)
+   remove Gridlet from the Accessibility list and add it again — otherwise it launches fine
+   but cannot move windows.
+
 ## Use
 
 Set your shortcut in **Settings…** (default ⌃⌥Space). Focus a window, press the shortcut, drag on the grid, release. **Esc** cancels. Grid size is configurable (default 8×8).

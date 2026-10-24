@@ -3,6 +3,40 @@ import Foundation
 
 let args = CommandLine.arguments
 
+if args.contains("--spaces-demo") {
+    let index = args.firstIndex(of: "--spaces-demo").flatMap { idx in
+        idx + 1 < args.count ? Int(args[idx + 1]) : nil
+    } ?? 3
+    // Marker first: a LaunchServices launch swallows stdout, so prove the flag arrived.
+    let marker = "DEMO_FLAG args=" + CommandLine.arguments.joined(separator: " ") + "\n"
+    if let data = marker.data(using: .utf8) {
+        let url = URL(fileURLWithPath: SpacesDemo.logPath)
+        if let handle = try? FileHandle(forWritingTo: url) {
+            handle.seekToEndOfFile(); handle.write(data); try? handle.close()
+        } else {
+            try? data.write(to: url)
+        }
+    }
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    final class SpacesDemoDelegate: NSObject, NSApplicationDelegate {
+        let index: Int
+        init(index: Int) { self.index = index }
+        func applicationDidFinishLaunching(_ notification: Notification) {
+            Task { @MainActor in
+                // Give the recorder a beat before the panel appears.
+                try? await Task.sleep(nanoseconds: 900_000_000)
+                SpacesDemo.run(spaceIndex: index)
+            }
+        }
+    }
+    let delegate = SpacesDemoDelegate(index: index)
+    app.delegate = delegate
+    withExtendedLifetime(delegate) {
+        app.run()
+    }
+}
+
 if args.contains("--spaces-self-test") {
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
