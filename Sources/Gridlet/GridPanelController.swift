@@ -48,7 +48,6 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     weak var coordinator: PanelCoordinator?
 
     let gridView = GridView()
-    let spaceStrip = SpaceStripView()
     private let chromeView = PanelChromeView()
     private let closeButton = NSButton()
     private let settingsButton = NSButton()
@@ -61,7 +60,6 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     private var displayMode: PanelDisplayMode = .live
     private var footerNoTarget = false
     private var gridHeightConstraint: NSLayoutConstraint?
-    private var stripHeightConstraint: NSLayoutConstraint?
 
     init(screen: NSScreen) {
         self.screen = screen
@@ -119,12 +117,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         gridView.delegate = self
         gridView.translatesAutoresizingMaskIntoConstraints = false
 
-        spaceStrip.onSelect = { [weak self] space, follow in
-            guard let self else { return }
-            self.coordinator?.send(windowTo: space, on: self.screen, follow: follow)
-        }
-
-        for v in [closeButton, settingsButton, targetHeaderView, errorLabel, spaceStrip, gridView,
+        for v in [closeButton, settingsButton, targetHeaderView, errorLabel, gridView,
                   footerHint, footerDetail, footerGridSize] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             chromeView.addSubview(v)
@@ -135,10 +128,6 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
             equalToConstant: PanelMetrics.gridHeight(for: screen)
         )
         gridHeightConstraint = heightConstraint
-        let stripConstraint = spaceStrip.heightAnchor.constraint(
-            equalToConstant: SpaceBridge.isAvailable ? PanelMetrics.spaceStripHeight : 0
-        )
-        stripHeightConstraint = stripConstraint
         NSLayoutConstraint.activate([
             chromeView.topAnchor.constraint(equalTo: content.topAnchor),
             chromeView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -173,11 +162,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
 
             gridView.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
             gridView.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor, constant: -pad),
-            spaceStrip.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
-            spaceStrip.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor, constant: -pad),
-            spaceStrip.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 8),
-            stripConstraint,
-            gridView.topAnchor.constraint(equalTo: spaceStrip.bottomAnchor, constant: 8),
+            gridView.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 8),
             heightConstraint,
 
             footerHint.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
@@ -196,7 +181,6 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         errorMessage: String? = nil
     ) {
         self.displayMode = displayMode
-        refreshSpaces()
         footerNoTarget = displayMode == .snapshotNoTarget || (displayMode == .live && target == nil)
         let grid = settings.grid(for: GridSettings.displayKey(for: screen))
         gridView.rows = grid.rows
@@ -304,32 +288,14 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     /// a selection maps proportionally onto the screen. Recomputed on every show,
     /// because visibleFrame changes with Dock/menu-bar settings without a screen change.
     func updatePanelGeometry(for screen: NSScreen) {
-        let hasStrip = hasSpaceStrip
-        let size = PanelMetrics.panelSize(for: screen, hasSpaceStrip: hasStrip)
+        let size = PanelMetrics.panelSize(for: screen)
         gridHeightConstraint?.constant = PanelMetrics.gridHeight(for: screen)
-        stripHeightConstraint?.constant = hasStrip ? PanelMetrics.spaceStripHeight : 0
-        spaceStrip.isHidden = !hasStrip
         (window as? GridPanelWindow)?.lockSize(size)
         errorLabel.preferredMaxLayoutWidth = size.width - PanelMetrics.padding * 2
         window?.setContentSize(size)
         window?.layoutIfNeeded()
     }
 
-
-    /// The strip is only useful when the private Spaces API answered and this display
-    /// actually has managed Spaces; otherwise the panel keeps its old shape.
-    var hasSpaceStrip: Bool {
-        SpaceBridge.isAvailable && !spaceStrip.spaces.isEmpty
-    }
-
-    func refreshSpaces() {
-        let spaces = SpaceBridge.isAvailable ? SpaceBridge.spaces(for: screen) : []
-        spaceStrip.configure(spaces: spaces)
-        updatePanelGeometry(for: screen)
-    }
-
-    /// Test hook.
-    var spaceStripForTesting: SpaceStripView { spaceStrip }
 
     func showPanel() {
         guard let window else { return }
@@ -670,119 +636,6 @@ final class PanelCoordinator: NSObject {
         }
     }
 
-
-    /// Sends the captured window to another Space, keeping its frame. The Space axis is a
-    /// click; the grid keeps every drag gesture to itself.
-    ///
-    /// SkyLight cannot move another app's window (verified: it only acts on windows owned by
-    /// the calling process), so this performs the gesture a user would: focus click, drag the
-    /// title bar to the screen edge, hold while macOS switches Space, release. That takes ~2s,
-    /// so it runs off the main thread with the panel already dismissed.
-    func send(windowTo space: ManagedSpace, on screen: NSScreen, follow: Bool) {
-        SpaceStripView.log("send requested: space \(space.index) id=\(space.id) current=\(space.isCurrent)")
-
-        if uiSmokeMode || snapshotDisplayMode != nil {
-            dismissAll(reason: .applied)
-            return
-        }
-        guard !space.isCurrent else { // already there: no-op, not an error
-            SpaceStripView.log("space is the current one, nothing to do")
-            dismissAll(reason: .applied)
-            return
-        }
-        // On failure keep the panel up so the error is actually readable: a dismiss here
-        // made every failure look like "the click did nothing".
-        guard let target = capturedTarget, WindowTargetResolver.isStillValid(target) else {
-            SpaceStripView.log("no valid target window")
-            panels[screen]?.showError(WindowTargetError.stale.errorDescription ?? "No target window")
-            return
-        }
-        guard EdgeDragSpaceMover.isSupported else {
-            SpaceStripView.log("moving between Spaces is not possible on this system")
-            panels[screen]?.showError("This Mac won't let Gridlet move windows between Spaces.")
-            return
-        }
-
-        let origin = SpaceBridge.spaces(for: screen).first(where: \.isCurrent)
-        let appName = WindowTargetResolver.appDisplayName(for: target)
-        let destinationIndex = space.index
-        guard EdgeDragSpaceMover.plan(target: target, to: space, on: screen) != nil else {
-            SpaceStripView.log("could not plan the move")
-            panels[screen]?.showError(SpaceStripModel.errorMessage(spaceIndex: destinationIndex))
-            return
-        }
-
-        dismissAll(reason: .applied)
-        SpaceStripView.log("dragging window of \(appName) to space \(space.id)")
-
-        // The drag switches the desktop along with the window, and a single hold can carry it
-        // past the destination, so retry the remainder and then put the desktop back where
-        // the user left it.
-        func attempt(_ remaining: Int) {
-            guard let plan = EdgeDragSpaceMover.plan(target: target, to: space, on: screen) else {
-                finish(success: false, appName: appName, index: destinationIndex, screen: screen, origin: origin, target: target, follow: follow)
-                return
-            }
-            DispatchQueue.global(qos: .userInitiated).async {
-                let result = EdgeDragSpaceMover.execute(plan)
-                DispatchQueue.main.async {
-                    if result.landed {
-                        finish(success: true, appName: appName, index: destinationIndex, screen: screen, origin: origin, target: target, follow: follow)
-                    } else if remaining > 1 {
-                        SpaceStripView.log("attempt failed (window on \(result.windowSpace.map(String.init) ?? "nil")), retrying")
-                        attempt(remaining - 1)
-                    } else {
-                        finish(success: false, appName: appName, index: destinationIndex, screen: screen, origin: origin, target: target, follow: follow)
-                    }
-                }
-            }
-        }
-
-        func finish(
-            success: Bool,
-            appName: String,
-            index: Int,
-            screen: NSScreen,
-            origin: ManagedSpace?,
-            target: WindowTarget,
-            follow: Bool
-        ) {
-            SpaceStripView.log("move finished ok=\(success)")
-            if follow, success, let identifier = SpaceBridge.displayIdentifier(for: screen) {
-                _ = SpaceBridge.switchTo(spaceID: space.id, displayIdentifier: identifier)
-            } else if let origin, let identifier = SpaceBridge.displayIdentifier(for: screen) {
-                // Dragging to the edge took the desktop with it; come back to where you were.
-                _ = SpaceBridge.switchTo(spaceID: origin.id, displayIdentifier: identifier)
-            }
-            guard success else {
-                SendToastController.shared.present(
-                    "Couldn't move that window to Space \(index)",
-                    on: screen,
-                    undo: nil
-                )
-                return
-            }
-            SendToastController.shared.present(
-                SpaceStripModel.sendMessage(appName: appName, spaceIndex: index),
-                on: screen,
-                undo: origin.map { originSpace in
-                    {
-                        guard let back = EdgeDragSpaceMover.plan(target: target, to: originSpace, on: screen) else { return }
-                        DispatchQueue.global(qos: .userInitiated).async {
-                            _ = EdgeDragSpaceMover.execute(back)
-                            DispatchQueue.main.async {
-                                if let identifier = SpaceBridge.displayIdentifier(for: screen) {
-                                    _ = SpaceBridge.switchTo(spaceID: originSpace.id, displayIdentifier: identifier)
-                                }
-                            }
-                        }
-                    }
-                }
-            )
-        }
-
-        attempt(3)
-    }
 
     func openSettings() {
         dismissAll(reason: .clickOutside)

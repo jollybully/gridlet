@@ -82,6 +82,13 @@ enum GridSettings {
         min(max(value, 0), maxGap)
     }
 
+    static func isMainDisplay(_ screen: NSScreen) -> Bool {
+        guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            return false
+        }
+        return CGDisplayIsMain(CGDirectDisplayID(number.uint32Value)) != 0
+    }
+
     /// Stable key for a display: "Main" for the primary, otherwise its UUID.
     static func displayKey(for screen: NSScreen) -> String {
         guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {

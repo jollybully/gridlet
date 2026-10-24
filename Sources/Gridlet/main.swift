@@ -3,98 +3,24 @@ import Foundation
 
 let args = CommandLine.arguments
 
-if args.contains("--event-probe") {
+if let idx = args.firstIndex(of: "--apply-preset"), idx + 1 < args.count {
+    let preset = args[idx + 1]
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
-    final class EventProbeDelegate: NSObject, NSApplicationDelegate {
-        func applicationDidFinishLaunching(_ notification: Notification) {
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 400_000_000)
-                EventProbe.run()
-                exit(0)
-            }
-        }
-    }
-    let delegate = EventProbeDelegate()
-    app.delegate = delegate
-    withExtendedLifetime(delegate) { app.run() }
-}
-
-if let idx = args.firstIndex(of: "--space-send"), idx + 1 < args.count, let spaceIndex = Int(args[idx + 1]) {
-    let app = NSApplication.shared
-    app.setActivationPolicy(.accessory)
-    final class SpaceSendDelegate: NSObject, NSApplicationDelegate {
-        let index: Int
-        init(index: Int) { self.index = index }
-        func applicationDidFinishLaunching(_ notification: Notification) {
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 600_000_000)
-                SpaceSendProbe.run(spaceIndex: index)
-                exit(0)
-            }
-        }
-    }
-    let delegate = SpaceSendDelegate(index: spaceIndex)
-    app.delegate = delegate
-    withExtendedLifetime(delegate) { app.run() }
-}
-
-if args.contains("--ax-dump") {
-    let app = NSApplication.shared
-    app.setActivationPolicy(.accessory)
-    final class AXDumpDelegate: NSObject, NSApplicationDelegate {
+    final class PresetDelegate: NSObject, NSApplicationDelegate {
+        let preset: String
+        init(preset: String) { self.preset = preset }
         func applicationDidFinishLaunching(_ notification: Notification) {
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 300_000_000)
-                AXDump.run()
+                PresetProbe.run(preset: preset)
                 exit(0)
             }
         }
     }
-    let delegate = AXDumpDelegate()
+    let delegate = PresetDelegate(preset: preset)
     app.delegate = delegate
     withExtendedLifetime(delegate) { app.run() }
-}
-
-if args.contains("--spaces-demo") {
-    let index = args.firstIndex(of: "--spaces-demo").flatMap { idx in
-        idx + 1 < args.count ? Int(args[idx + 1]) : nil
-    } ?? 3
-    // Marker first: a LaunchServices launch swallows stdout, so prove the flag arrived.
-    let marker = "DEMO_FLAG args=" + CommandLine.arguments.joined(separator: " ") + "\n"
-    if let data = marker.data(using: .utf8) {
-        let url = URL(fileURLWithPath: SpacesDemo.logPath)
-        if let handle = try? FileHandle(forWritingTo: url) {
-            handle.seekToEndOfFile(); handle.write(data); try? handle.close()
-        } else {
-            try? data.write(to: url)
-        }
-    }
-    let app = NSApplication.shared
-    app.setActivationPolicy(.accessory)
-    final class SpacesDemoDelegate: NSObject, NSApplicationDelegate {
-        let index: Int
-        init(index: Int) { self.index = index }
-        func applicationDidFinishLaunching(_ notification: Notification) {
-            Task { @MainActor in
-                // Give the recorder a beat before the panel appears.
-                try? await Task.sleep(nanoseconds: 900_000_000)
-                SpacesDemo.run(spaceIndex: index)
-            }
-        }
-    }
-    let delegate = SpacesDemoDelegate(index: index)
-    app.delegate = delegate
-    withExtendedLifetime(delegate) {
-        app.run()
-    }
-}
-
-if args.contains("--spaces-self-test") {
-    let app = NSApplication.shared
-    app.setActivationPolicy(.accessory)
-    print(SpacesSelfTest.runJSON())
-    exit(0)
 }
 
 if args.contains("--diagnostics-json") {

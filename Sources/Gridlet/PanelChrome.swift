@@ -21,9 +21,6 @@ enum PanelMetrics {
 
     /// Chrome above the grid: top padding, header row, the error row and its gaps.
     static let chromeAboveGrid: CGFloat = 70
-    /// The Space strip lives between the error row and the grid.
-    static let spaceStripHeight: CGFloat = 30
-    static let spaceStripGap: CGFloat = 8
     /// Chrome below the grid: footer row plus bottom padding.
     static let chromeBelowGrid: CGFloat = 62
 
@@ -63,15 +60,10 @@ enum PanelMetrics {
         return min(max(exact, minGridHeight), maxGridHeight).rounded()
     }
 
-    /// Everything above the grid, including the Space strip when it is shown.
-    static func gridTopInset(hasSpaceStrip: Bool) -> CGFloat {
-        chromeAboveGrid + (hasSpaceStrip ? spaceStripHeight + spaceStripGap : 0)
-    }
-
-    static func panelSize(for screen: NSScreen, hasSpaceStrip: Bool = SpaceBridge.isAvailable) -> NSSize {
+    static func panelSize(for screen: NSScreen) -> NSSize {
         NSSize(
             width: width,
-            height: gridTopInset(hasSpaceStrip: hasSpaceStrip) + gridHeight(for: screen) + chromeBelowGrid
+            height: chromeAboveGrid + gridHeight(for: screen) + chromeBelowGrid
         )
     }
 

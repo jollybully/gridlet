@@ -265,7 +265,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         displayChoices = [(nil, "Default")]
         for screen in NSScreen.screens {
             let key = GridSettings.displayKey(for: screen)
-            let name = CGDisplayIsMain(SpaceBridge.displayNumber(for: screen)) != 0
+            let name = GridSettings.isMainDisplay(screen)
                 ? "Main display"
                 : screen.localizedName
             let suffix = settings.hasOverride(for: key) ? " (custom)" : ""
