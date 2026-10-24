@@ -3,6 +3,13 @@ import Foundation
 
 let args = CommandLine.arguments
 
+if args.contains("--spaces-self-test") {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    print(SpacesSelfTest.runJSON())
+    exit(0)
+}
+
 if args.contains("--diagnostics-json") {
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)

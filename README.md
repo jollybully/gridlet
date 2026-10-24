@@ -17,6 +17,20 @@ A tiny macOS window manager. Press your shortcut, drag a rectangle on the grid, 
 
 Set your shortcut in **Settings…** (default ⌃⌥Space). Focus a window, press the shortcut, drag on the grid, release. **Esc** cancels. Grid size is configurable (default 8×8).
 
+### Sending a window to another Space
+
+The panel lists this display's Spaces as numbered chips between the header and the grid, with the current one dashed. **Click a chip** and the focused window moves to that Space exactly as it is — same size, same position. The panel dismisses as usual and a short toast offers **Undo**. Hold **⌥** when clicking to follow the window to that Space.
+
+Click is the Space axis, drag is the size axis; the grid never sends and the chips never resize.
+
+This uses SkyLight's private Spaces API through `dlopen`/`dlsym` (no headers, no injection, no helper daemon). If the symbols aren't there the strip is hidden and the rest of the app is unaffected. It is known to work on macOS 15.2 **with SIP disabled**; with SIP enabled the move may be refused — that has not been verified either way, so treat all Spaces behaviour as unverified on your machine. Check with:
+
+```bash
+./dist/Gridlet.app/Contents/MacOS/Gridlet --spaces-self-test
+```
+
+which moves a window it owns to another Space, reads the membership back, and restores it.
+
 ## Build
 
 ```bash

@@ -48,6 +48,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     weak var coordinator: PanelCoordinator?
 
     let gridView = GridView()
+    let spaceStrip = SpaceStripView()
     private let chromeView = PanelChromeView()
     private let closeButton = NSButton()
     private let settingsButton = NSButton()
@@ -60,6 +61,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     private var displayMode: PanelDisplayMode = .live
     private var footerNoTarget = false
     private var gridHeightConstraint: NSLayoutConstraint?
+    private var stripHeightConstraint: NSLayoutConstraint?
 
     init(screen: NSScreen) {
         self.screen = screen
@@ -117,7 +119,12 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         gridView.delegate = self
         gridView.translatesAutoresizingMaskIntoConstraints = false
 
-        for v in [closeButton, settingsButton, targetHeaderView, errorLabel, gridView,
+        spaceStrip.onSelect = { [weak self] space, follow in
+            guard let self else { return }
+            self.coordinator?.send(windowTo: space, on: self.screen, follow: follow)
+        }
+
+        for v in [closeButton, settingsButton, targetHeaderView, errorLabel, spaceStrip, gridView,
                   footerHint, footerDetail, footerGridSize] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             chromeView.addSubview(v)
@@ -128,6 +135,10 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
             equalToConstant: PanelMetrics.gridHeight(for: screen)
         )
         gridHeightConstraint = heightConstraint
+        let stripConstraint = spaceStrip.heightAnchor.constraint(
+            equalToConstant: SpaceBridge.isAvailable ? PanelMetrics.spaceStripHeight : 0
+        )
+        stripHeightConstraint = stripConstraint
         NSLayoutConstraint.activate([
             chromeView.topAnchor.constraint(equalTo: content.topAnchor),
             chromeView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -162,7 +173,11 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
 
             gridView.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
             gridView.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor, constant: -pad),
-            gridView.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 8),
+            spaceStrip.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
+            spaceStrip.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor, constant: -pad),
+            spaceStrip.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 8),
+            stripConstraint,
+            gridView.topAnchor.constraint(equalTo: spaceStrip.bottomAnchor, constant: 8),
             heightConstraint,
 
             footerHint.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
@@ -181,6 +196,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         errorMessage: String? = nil
     ) {
         self.displayMode = displayMode
+        refreshSpaces()
         footerNoTarget = displayMode == .snapshotNoTarget || (displayMode == .live && target == nil)
         gridView.rows = settings.rows
         gridView.columns = settings.columns
@@ -285,13 +301,32 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     /// a selection maps proportionally onto the screen. Recomputed on every show,
     /// because visibleFrame changes with Dock/menu-bar settings without a screen change.
     func updatePanelGeometry(for screen: NSScreen) {
-        let size = PanelMetrics.panelSize(for: screen)
+        let hasStrip = hasSpaceStrip
+        let size = PanelMetrics.panelSize(for: screen, hasSpaceStrip: hasStrip)
         gridHeightConstraint?.constant = PanelMetrics.gridHeight(for: screen)
+        stripHeightConstraint?.constant = hasStrip ? PanelMetrics.spaceStripHeight : 0
+        spaceStrip.isHidden = !hasStrip
         (window as? GridPanelWindow)?.lockSize(size)
         errorLabel.preferredMaxLayoutWidth = size.width - PanelMetrics.padding * 2
         window?.setContentSize(size)
         window?.layoutIfNeeded()
     }
+
+
+    /// The strip is only useful when the private Spaces API answered and this display
+    /// actually has managed Spaces; otherwise the panel keeps its old shape.
+    var hasSpaceStrip: Bool {
+        SpaceBridge.isAvailable && !spaceStrip.spaces.isEmpty
+    }
+
+    func refreshSpaces() {
+        let spaces = SpaceBridge.isAvailable ? SpaceBridge.spaces(for: screen) : []
+        spaceStrip.configure(spaces: spaces)
+        updatePanelGeometry(for: screen)
+    }
+
+    /// Test hook.
+    var spaceStripForTesting: SpaceStripView { spaceStrip }
 
     func showPanel() {
         guard let window else { return }
@@ -625,6 +660,47 @@ final class PanelCoordinator: NSObject {
         } else {
             dismissAll(reason: .applied)
         }
+    }
+
+
+    /// Sends the captured window to another Space, keeping its frame. The Space axis is
+    /// a click; the grid keeps every drag gesture to itself.
+    func send(windowTo space: ManagedSpace, on screen: NSScreen, follow: Bool) {
+        // Same dismissal contract as a resize commit: the panel always goes away.
+        defer { dismissAll(reason: .applied) }
+
+        if uiSmokeMode || snapshotDisplayMode != nil { return }
+
+        guard let target = capturedTarget, WindowTargetResolver.isStillValid(target) else {
+            panels[screen]?.showError(WindowTargetError.stale.errorDescription ?? "No target window")
+            return
+        }
+        guard !space.isCurrent else { return } // already there: no-op, not an error
+
+        guard SpaceBridge.isAvailable, let windowID = SpaceBridge.windowID(for: target) else {
+            panels[screen]?.showError("This build can't move windows between Spaces.")
+            return
+        }
+
+        let origin = SpaceBridge.spaceID(forWindow: windowID)
+        guard SpaceBridge.move(window: windowID, to: space.id) else {
+            panels[screen]?.showError(SpaceStripModel.errorMessage(spaceIndex: space.index))
+            return
+        }
+
+        if follow, let displayIdentifier = SpaceBridge.displayIdentifier(for: screen) {
+            _ = SpaceBridge.switchTo(spaceID: space.id, displayIdentifier: displayIdentifier)
+        }
+
+        let appName = WindowTargetResolver.appDisplayName(for: target)
+        let canUndo = origin != nil
+        SendToastController.shared.present(
+            SpaceStripModel.sendMessage(appName: appName, spaceIndex: space.index),
+            on: screen,
+            undo: canUndo ? {
+                _ = SpaceBridge.move(window: windowID, to: origin!)
+            } : nil
+        )
     }
 
     func openSettings() {
