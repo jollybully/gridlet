@@ -9,7 +9,15 @@ protocol GridViewDelegate: AnyObject {
 
 enum GridTileMetrics {
     static let gap: CGFloat = 3.5
-    static let tileRadius: CGFloat = 5
+    /// Corner radius scales with the tile so dense grids (12x12) do not turn into pills.
+    static let tileRadiusRatio: CGFloat = 0.12
+    static let minTileRadius: CGFloat = 2
+    static let maxTileRadius: CGFloat = 5
+
+    static func tileRadius(forTileWidth width: CGFloat, height: CGFloat) -> CGFloat {
+        let side = min(width, height)
+        return min(maxTileRadius, max(minTileRadius, side * tileRadiusRatio))
+    }
 }
 
 final class GridView: NSView {
@@ -92,6 +100,7 @@ final class GridView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let (tw, th) = tileSize()
         let gap = GridTileMetrics.gap
+        let radius = GridTileMetrics.tileRadius(forTileWidth: tw, height: th)
         let palette = tilePalette()
         let accent = NSColor.controlAccentColor
 
@@ -100,7 +109,7 @@ final class GridView: NSView {
         for row in 0..<rows {
             for col in 0..<columns {
                 let rect = tileRect(row: row, col: col)
-                let path = NSBezierPath(roundedRect: rect, xRadius: GridTileMetrics.tileRadius, yRadius: GridTileMetrics.tileRadius)
+                let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
 
                 if let sel, row >= sel.rowStart, row <= sel.rowEnd, col >= sel.colStart, col <= sel.colEnd {
                     accent.withAlphaComponent(0.28).setFill()
@@ -109,13 +118,13 @@ final class GridView: NSView {
                     palette.hoverFill.setFill()
                     path.fill()
                     palette.tileEdge.setStroke()
-                    path.lineWidth = 0.75
+                    path.lineWidth = 0.5
                     path.stroke()
                 } else {
                     palette.idleFill.setFill()
                     path.fill()
                     palette.tileEdge.setStroke()
-                    path.lineWidth = 0.75
+                    path.lineWidth = 0.5
                     path.stroke()
                 }
             }
@@ -129,7 +138,7 @@ final class GridView: NSView {
                 height: CGFloat(sel.rowEnd - sel.rowStart + 1) * th + CGFloat(sel.rowEnd - sel.rowStart) * gap
             )
             accent.setStroke()
-            let outline = NSBezierPath(roundedRect: outer, xRadius: GridTileMetrics.tileRadius + 1, yRadius: GridTileMetrics.tileRadius + 1)
+            let outline = NSBezierPath(roundedRect: outer, xRadius: radius + 1.5, yRadius: radius + 1.5)
             outline.lineWidth = 2
             outline.stroke()
         }
