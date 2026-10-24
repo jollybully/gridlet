@@ -3,6 +3,59 @@ import Foundation
 
 let args = CommandLine.arguments
 
+if args.contains("--event-probe") {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    final class EventProbeDelegate: NSObject, NSApplicationDelegate {
+        func applicationDidFinishLaunching(_ notification: Notification) {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                EventProbe.run()
+                exit(0)
+            }
+        }
+    }
+    let delegate = EventProbeDelegate()
+    app.delegate = delegate
+    withExtendedLifetime(delegate) { app.run() }
+}
+
+if let idx = args.firstIndex(of: "--space-send"), idx + 1 < args.count, let spaceIndex = Int(args[idx + 1]) {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    final class SpaceSendDelegate: NSObject, NSApplicationDelegate {
+        let index: Int
+        init(index: Int) { self.index = index }
+        func applicationDidFinishLaunching(_ notification: Notification) {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                SpaceSendProbe.run(spaceIndex: index)
+                exit(0)
+            }
+        }
+    }
+    let delegate = SpaceSendDelegate(index: spaceIndex)
+    app.delegate = delegate
+    withExtendedLifetime(delegate) { app.run() }
+}
+
+if args.contains("--ax-dump") {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    final class AXDumpDelegate: NSObject, NSApplicationDelegate {
+        func applicationDidFinishLaunching(_ notification: Notification) {
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                AXDump.run()
+                exit(0)
+            }
+        }
+    }
+    let delegate = AXDumpDelegate()
+    app.delegate = delegate
+    withExtendedLifetime(delegate) { app.run() }
+}
+
 if args.contains("--spaces-demo") {
     let index = args.firstIndex(of: "--spaces-demo").flatMap { idx in
         idx + 1 < args.count ? Int(args[idx + 1]) : nil
