@@ -198,9 +198,12 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         self.displayMode = displayMode
         refreshSpaces()
         footerNoTarget = displayMode == .snapshotNoTarget || (displayMode == .live && target == nil)
-        gridView.rows = settings.rows
-        gridView.columns = settings.columns
-        footerGridSize.stringValue = "\(settings.rows)×\(settings.columns)"
+        let grid = settings.grid(for: GridSettings.displayKey(for: screen))
+        gridView.rows = grid.rows
+        gridView.columns = grid.columns
+        footerGridSize.stringValue = settings.gap > 0
+            ? "\(grid.rows)×\(grid.columns) · \(settings.gap)pt"
+            : "\(grid.rows)×\(grid.columns)"
         gridView.resetSelection()
 
         switch displayMode {
@@ -481,8 +484,9 @@ final class PanelCoordinator: NSObject {
     func reloadSettings() {
         settings = GridSettings.load()
         for (_, panel) in panels {
-            panel.gridView.rows = settings.rows
-            panel.gridView.columns = settings.columns
+            let grid = settings.grid(for: GridSettings.displayKey(for: panel.screen))
+            panel.gridView.rows = grid.rows
+            panel.gridView.columns = grid.columns
         }
     }
 
@@ -611,7 +615,9 @@ final class PanelCoordinator: NSObject {
             return
         }
         let vf = screen.visibleFrame
-        guard let cocoa = ScreenGeometry.cocoaFrame(for: selection, rows: rows, columns: columns, visibleFrame: vf) else {
+        guard let cocoa = ScreenGeometry.cocoaFrame(
+            for: selection, rows: rows, columns: columns, visibleFrame: vf, gap: CGFloat(settings.gap)
+        ) else {
             overlays[screen]?.clear()
             return
         }
@@ -627,7 +633,9 @@ final class PanelCoordinator: NSObject {
         let vf = screen.visibleFrame
         let primaryTop = ScreenGeometry.primaryTopY(screens: NSScreen.screens)
 
-        guard let cocoa = ScreenGeometry.cocoaFrame(for: selection, rows: gridRows, columns: gridColumns, visibleFrame: vf) else { return }
+        guard let cocoa = ScreenGeometry.cocoaFrame(
+            for: selection, rows: gridRows, columns: gridColumns, visibleFrame: vf, gap: CGFloat(settings.gap)
+        ) else { return }
         let axFrame = ScreenGeometry.cocoaRectToAX(cocoa, primaryTopY: primaryTop)
 
         if uiSmokeMode || snapshotDisplayMode != nil {

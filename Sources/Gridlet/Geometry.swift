@@ -68,7 +68,29 @@ enum ScreenGeometry {
 
     /// Frame for an inclusive grid selection within `visibleFrame` (Cocoa coords).
     /// Row 0 is the top row of the grid (nearest visible maxY).
+    ///
+    /// `gap` insets the result on every side: it keeps windows off the screen edges and,
+    /// because both neighbours of a shared edge give up that much, it also separates
+    /// adjacent windows by twice the gap.
     static func cocoaFrame(
+        for selection: GridSelection,
+        rows: Int,
+        columns: Int,
+        visibleFrame: CGRect,
+        gap: CGFloat = 0
+    ) -> CGRect? {
+        guard let raw = rawCocoaFrame(for: selection, rows: rows, columns: columns, visibleFrame: visibleFrame) else {
+            return nil
+        }
+        guard gap > 0 else { return raw }
+        // Never let the margin collapse a selection into nothing.
+        let insetX = min(gap, (raw.width - 1) / 2)
+        let insetY = min(gap, (raw.height - 1) / 2)
+        guard insetX > 0 || insetY > 0 else { return raw }
+        return raw.insetBy(dx: insetX, dy: insetY)
+    }
+
+    private static func rawCocoaFrame(
         for selection: GridSelection,
         rows: Int,
         columns: Int,
@@ -112,8 +134,12 @@ struct ScreenGeometryModel: Sendable {
     /// Primary display top in Cocoa global space (`screenFrames.first.maxY`).
     var primaryTopY: CGFloat
 
+    var gap: CGFloat = 0
+
     func cocoaFrame(for selection: GridSelection, rows: Int, columns: Int) -> CGRect? {
-        ScreenGeometry.cocoaFrame(for: selection, rows: rows, columns: columns, visibleFrame: visibleFrame)
+        ScreenGeometry.cocoaFrame(
+            for: selection, rows: rows, columns: columns, visibleFrame: visibleFrame, gap: gap
+        )
     }
 
     func axFrame(for selection: GridSelection, rows: Int, columns: Int) -> CGRect? {

@@ -15,6 +15,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let rowsValue = NSTextField(labelWithString: "")
     private let colsStepper = NSStepper()
     private let colsValue = NSTextField(labelWithString: "")
+    private let displayPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let resetGridButton = NSButton(title: "Use default", target: nil, action: nil)
+    private let gapStepper = NSStepper()
+    private let gapValue = NSTextField(labelWithString: "")
+    /// nil means the grid section is editing the default grid rather than a display override.
+    private var selectedDisplayKey: String?
+    private var displayChoices: [(key: String?, title: String)] = []
     private let closeAfterResizeCheckbox = NSButton(checkboxWithTitle: "Close after resizing", target: nil, action: nil)
     private let previewCheckbox = NSButton(checkboxWithTitle: "Show resize preview", target: nil, action: nil)
     private let loginCheckbox = NSButton(checkboxWithTitle: "Launch Gridlet at login", target: nil, action: nil)
@@ -23,7 +30,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private init() {
         settings = GridSettings.load()
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 380),
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 404),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -88,6 +95,21 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         colsStepper.target = self
         colsStepper.action = #selector(stepperChanged)
 
+        displayPopup.target = self
+        displayPopup.action = #selector(displayChanged)
+        displayPopup.font = .systemFont(ofSize: 12)
+        resetGridButton.target = self
+        resetGridButton.action = #selector(resetGrid)
+        resetGridButton.bezelStyle = .inline
+        resetGridButton.font = .systemFont(ofSize: 11)
+
+        gapStepper.minValue = 0
+        gapStepper.maxValue = Double(GridSettings.maxGap)
+        gapStepper.increment = 2
+        gapStepper.target = self
+        gapStepper.action = #selector(gapChanged)
+        gapValue.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+
         closeAfterResizeCheckbox.target = self
         closeAfterResizeCheckbox.action = #selector(toggleChanged)
         previewCheckbox.target = self
@@ -107,7 +129,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         let axButton = NSButton(title: "Open Accessibility Settings", target: self, action: #selector(openAX))
 
-        for v in [hotkeyTitle, hotkeyRecorder, hotkeyStatus, gridTitle, rowsLabel, rowsValue, rowsStepper, colsLabel, colsValue, colsStepper,
+        let gapLabel = NSTextField(labelWithString: "Edge gap")
+        for v in [hotkeyTitle, hotkeyRecorder, hotkeyStatus, gridTitle, displayPopup, resetGridButton,
+                  rowsLabel, rowsValue, rowsStepper, colsLabel, colsValue, colsStepper,
+                  gapLabel, gapStepper, gapValue,
                   closeAfterResizeCheckbox, previewCheckbox, loginCheckbox, axStatus, axButton] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(v)
@@ -130,7 +155,13 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             gridTitle.topAnchor.constraint(equalTo: hotkeyStatus.bottomAnchor, constant: 16),
             gridTitle.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
 
-            rowsLabel.topAnchor.constraint(equalTo: gridTitle.bottomAnchor, constant: 14),
+            displayPopup.centerYAnchor.constraint(equalTo: gridTitle.centerYAnchor),
+            displayPopup.leadingAnchor.constraint(greaterThanOrEqualTo: gridTitle.trailingAnchor, constant: 10),
+            resetGridButton.centerYAnchor.constraint(equalTo: displayPopup.centerYAnchor),
+            resetGridButton.leadingAnchor.constraint(equalTo: displayPopup.trailingAnchor, constant: 6),
+            resetGridButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -pad),
+
+            rowsLabel.topAnchor.constraint(equalTo: gridTitle.bottomAnchor, constant: 12),
             rowsLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
             rowsValue.centerYAnchor.constraint(equalTo: rowsLabel.centerYAnchor),
             rowsValue.leadingAnchor.constraint(equalTo: rowsLabel.trailingAnchor, constant: 12),
@@ -145,7 +176,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             colsStepper.centerYAnchor.constraint(equalTo: colsLabel.centerYAnchor),
             colsStepper.leadingAnchor.constraint(equalTo: colsValue.trailingAnchor, constant: 4),
 
-            closeAfterResizeCheckbox.topAnchor.constraint(equalTo: rowsLabel.bottomAnchor, constant: 18),
+            gapLabel.topAnchor.constraint(equalTo: rowsLabel.bottomAnchor, constant: 12),
+            gapLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
+            gapValue.centerYAnchor.constraint(equalTo: gapLabel.centerYAnchor),
+            gapValue.leadingAnchor.constraint(equalTo: gapLabel.trailingAnchor, constant: 12),
+            gapValue.widthAnchor.constraint(equalToConstant: 40),
+            gapStepper.centerYAnchor.constraint(equalTo: gapLabel.centerYAnchor),
+            gapStepper.leadingAnchor.constraint(equalTo: gapValue.trailingAnchor, constant: 4),
+
+            closeAfterResizeCheckbox.topAnchor.constraint(equalTo: gapLabel.bottomAnchor, constant: 14),
             closeAfterResizeCheckbox.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
 
             previewCheckbox.topAnchor.constraint(equalTo: closeAfterResizeCheckbox.bottomAnchor, constant: 8),
@@ -169,10 +208,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         hotkeyRecorder.binding = settings.showPanelHotKey
         hotkeyStatus.stringValue = ""
         hotkeyStatus.textColor = .secondaryLabelColor
-        rowsStepper.integerValue = settings.rows
-        colsStepper.integerValue = settings.columns
-        rowsValue.stringValue = "\(settings.rows)"
-        colsValue.stringValue = "\(settings.columns)"
+        reloadDisplayChoices()
+        reloadGridControls()
+        gapStepper.integerValue = settings.gap
+        gapValue.stringValue = "\(settings.gap) pt"
         closeAfterResizeCheckbox.state = settings.keepPanelOpen ? .off : .on
         previewCheckbox.state = settings.showPreview ? .on : .off
         updateAXStatus()
@@ -221,11 +260,67 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         }
     }
 
+    /// Default grid first, then one row per display that has its own override.
+    private func reloadDisplayChoices() {
+        displayChoices = [(nil, "Default")]
+        for screen in NSScreen.screens {
+            let key = GridSettings.displayKey(for: screen)
+            let name = CGDisplayIsMain(SpaceBridge.displayNumber(for: screen)) != 0
+                ? "Main display"
+                : screen.localizedName
+            let suffix = settings.hasOverride(for: key) ? " (custom)" : ""
+            displayChoices.append((key, "\(name)\(suffix)"))
+        }
+        displayPopup.removeAllItems()
+        displayPopup.addItems(withTitles: displayChoices.map(\.title))
+        let selectedIndex = displayChoices.firstIndex { $0.key == selectedDisplayKey } ?? 0
+        displayPopup.selectItem(at: selectedIndex)
+        selectedDisplayKey = displayChoices[selectedIndex].key
+        resetGridButton.isHidden = selectedDisplayKey == nil
+    }
+
+    private func reloadGridControls() {
+        let grid = selectedDisplayKey.map { settings.grid(for: $0) }
+            ?? GridSettings.DisplayGrid(rows: settings.rows, columns: settings.columns)
+        rowsStepper.integerValue = grid.rows
+        colsStepper.integerValue = grid.columns
+        rowsValue.stringValue = "\(grid.rows)"
+        colsValue.stringValue = "\(grid.columns)"
+    }
+
+    @objc private func displayChanged() {
+        let index = displayPopup.indexOfSelectedItem
+        guard displayChoices.indices.contains(index) else { return }
+        selectedDisplayKey = displayChoices[index].key
+        resetGridButton.isHidden = selectedDisplayKey == nil
+        reloadGridControls()
+    }
+
     @objc private func stepperChanged() {
-        settings.rows = GridSettings.clampGrid(rowsStepper.integerValue)
-        settings.columns = GridSettings.clampGrid(colsStepper.integerValue)
-        rowsValue.stringValue = "\(settings.rows)"
-        colsValue.stringValue = "\(settings.columns)"
+        let rows = GridSettings.clampGrid(rowsStepper.integerValue)
+        let columns = GridSettings.clampGrid(colsStepper.integerValue)
+        if let key = selectedDisplayKey {
+            settings.setGrid(GridSettings.DisplayGrid(rows: rows, columns: columns), for: key)
+        } else {
+            settings.rows = rows
+            settings.columns = columns
+        }
+        persist()
+        reloadDisplayChoices()
+        reloadGridControls()
+    }
+
+    @objc private func resetGrid() {
+        guard let key = selectedDisplayKey else { return }
+        settings.clearOverride(for: key)
+        persist()
+        reloadDisplayChoices()
+        reloadGridControls()
+    }
+
+    @objc private func gapChanged() {
+        settings.gap = GridSettings.clampGap(gapStepper.integerValue)
+        gapValue.stringValue = "\(settings.gap) pt"
         persist()
     }
 

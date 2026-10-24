@@ -24,19 +24,50 @@ enum GridSettings {
 
     static let defaultsKey = "org.gridlet.Gridlet.settings"
 
+    /// Grid dimensions for one display, used when that display overrides the default.
+    struct DisplayGrid: Codable, Equatable, Sendable {
+        var rows: Int
+        var columns: Int
+    }
+
+    static let maxGap = 24
+
     struct Snapshot: Codable, Equatable, Sendable {
         var rows: Int = 8
         var columns: Int = 8
+        /// Points of margin left around every applied window; also separates neighbours.
+        var gap: Int = 0
+        /// Per-display grid overrides, keyed by `displayKey(for:)`.
+        var displayGrids: [String: DisplayGrid] = [:]
         var keepPanelOpen: Bool = false
         var showPreview: Bool = true
         var showPanelHotKey: HotKeyBinding = .defaultShowPanel
         var launchAtLogin: Bool = false
+
+        /// Rows/columns in force on a display: its override, else the default grid.
+        func grid(for displayKey: String) -> DisplayGrid {
+            displayGrids[displayKey] ?? DisplayGrid(rows: rows, columns: columns)
+        }
+
+        func hasOverride(for displayKey: String) -> Bool {
+            displayGrids[displayKey] != nil
+        }
+
+        mutating func setGrid(_ grid: DisplayGrid, for displayKey: String) {
+            displayGrids[displayKey] = grid
+        }
+
+        mutating func clearOverride(for displayKey: String) {
+            displayGrids.removeValue(forKey: displayKey)
+        }
     }
 
     /// Legacy on-disk shape (presets / extra fields ignored on load).
     private struct LegacySnapshot: Decodable {
         var rows: Int?
         var columns: Int?
+        var gap: Int?
+        var displayGrids: [String: DisplayGrid]?
         var keepPanelOpen: Bool?
         var showPreview: Bool?
         var showPanelHotKey: HotKeyBinding?
@@ -45,6 +76,24 @@ enum GridSettings {
 
     static func clampGrid(_ value: Int) -> Int {
         min(max(value, minGrid), maxGrid)
+    }
+
+    static func clampGap(_ value: Int) -> Int {
+        min(max(value, 0), maxGap)
+    }
+
+    /// Stable key for a display: "Main" for the primary, otherwise its UUID.
+    static func displayKey(for screen: NSScreen) -> String {
+        guard let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber else {
+            return screen.localizedName
+        }
+        let displayID = CGDirectDisplayID(number.uint32Value)
+        if CGDisplayIsMain(displayID) != 0 { return "Main" }
+        if let uuid = CGDisplayCreateUUIDFromDisplayID(displayID)?.takeRetainedValue(),
+           let text = CFUUIDCreateString(nil, uuid) as String? {
+            return text.uppercased()
+        }
+        return screen.localizedName
     }
 
     static func load(from defaults: UserDefaults = .standard) -> Snapshot {
@@ -67,6 +116,8 @@ enum GridSettings {
             if let preview = legacy.showPreview { snap.showPreview = preview }
             if let hotKey = legacy.showPanelHotKey { snap.showPanelHotKey = hotKey }
             if let login = legacy.launchAtLogin { snap.launchAtLogin = login }
+            if let gap = legacy.gap { snap.gap = gap }
+            if let grids = legacy.displayGrids { snap.displayGrids = grids }
             return normalized(snap)
         }
         if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
@@ -76,6 +127,15 @@ enum GridSettings {
             if let keep = object["keepPanelOpen"] as? Bool { snap.keepPanelOpen = keep }
             if let preview = object["showPreview"] as? Bool { snap.showPreview = preview }
             if let login = object["launchAtLogin"] as? Bool { snap.launchAtLogin = login }
+            if let gap = object["gap"] as? Int { snap.gap = gap }
+            if let grids = object["displayGrids"] as? [String: Any] {
+                snap.displayGrids = grids.reduce(into: [:]) { result, entry in
+                    guard let value = entry.value as? [String: Any],
+                          let rows = value["rows"] as? Int,
+                          let columns = value["columns"] as? Int else { return }
+                    result[entry.key] = DisplayGrid(rows: rows, columns: columns)
+                }
+            }
             return normalized(snap)
         }
         return Snapshot()
@@ -85,6 +145,10 @@ enum GridSettings {
         var s = snap
         s.rows = clampGrid(s.rows)
         s.columns = clampGrid(s.columns)
+        s.gap = clampGap(s.gap)
+        s.displayGrids = s.displayGrids.mapValues {
+            DisplayGrid(rows: clampGrid($0.rows), columns: clampGrid($0.columns))
+        }
         return s
     }
 
