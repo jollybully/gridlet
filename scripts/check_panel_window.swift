@@ -15,8 +15,11 @@ guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[Stri
 
 // NSPanel.level == .floating → layer 3
 let floatingLayer = 3
+// Lower bounds, not the expected size: the panel tracks the display aspect and is
+// deliberately small (Divvy-sized), so only reject windows too tiny to be the grid.
+// Floor = PanelMetrics.chromeAboveGrid + chromeBelowGrid + minGridHeight ≈ 228.
 let minWidth: CGFloat = 250
-let minHeight: CGFloat = 300
+let minHeight: CGFloat = 220
 
 var found = false
 for win in list {

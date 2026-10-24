@@ -14,8 +14,9 @@ final class HeaderAlignmentTests: XCTestCase {
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
-        XCTAssertEqual(snap.panelSize.width, 320, accuracy: 0.5, file: file, line: line)
-        XCTAssertEqual(snap.panelSize.height, 380, accuracy: 0.5, file: file, line: line)
+        let expected = PanelMetrics.referencePanelSize
+        XCTAssertEqual(snap.panelSize.width, Double(expected.width), accuracy: 0.5, file: file, line: line)
+        XCTAssertEqual(snap.panelSize.height, Double(expected.height), accuracy: 0.5, file: file, line: line)
         XCTAssertLessThanOrEqual(abs(snap.centerDelta), Double(centerTolerance), file: file, line: line)
         XCTAssertEqual(
             snap.iconTitleGap,
@@ -122,9 +123,54 @@ final class HeaderAlignmentTests: XCTestCase {
             .deletingLastPathComponent()
             .deletingLastPathComponent()
         let out = root.appendingPathComponent("verification/header-alignment.json")
+        try FileManager.default.createDirectory(at: out.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(snaps)
         try data.write(to: out, options: .atomic)
+    }
+
+    /// The grid must carry the display's aspect ratio so that selections are
+    /// proportional slices of the screen, while the palette stays Divvy-small.
+    func testGridAndPanelFollowDisplayAspect() {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else {
+            XCTFail("no screen")
+            return
+        }
+        let controller = GridPanelController(screen: screen)
+        controller.updatePanelGeometry(for: screen)
+        guard let window = controller.window else {
+            XCTFail("no window")
+            return
+        }
+
+        let size = PanelMetrics.panelSize(for: screen)
+        XCTAssertEqual(window.contentView?.bounds.width ?? 0, size.width, accuracy: 0.5)
+        XCTAssertEqual(window.contentView?.bounds.height ?? 0, size.height, accuracy: 0.5)
+
+        let gridWidth = size.width - PanelMetrics.padding * 2
+        XCTAssertEqual(gridWidth, PanelMetrics.gridWidth, accuracy: 0.5)
+
+        let gridHeight = controller.gridView.frame.height
+        XCTAssertEqual(gridHeight, PanelMetrics.gridHeight(for: screen), accuracy: 0.5)
+
+        let clamped = gridHeight <= PanelMetrics.minGridHeight + 0.5
+            || gridHeight >= PanelMetrics.maxGridHeight - 0.5
+        if !clamped {
+            XCTAssertEqual(
+                gridWidth / gridHeight,
+                PanelMetrics.gridAspect(for: screen),
+                accuracy: 0.01,
+                "grid must match the display aspect when not clamped"
+            )
+        }
+
+        // Divvy-small palette: never more than a third of the display's width.
+        XCTAssertLessThan(size.width, screen.visibleFrame.width / 3)
+        // A landscape display gets a landscape grid.
+        if PanelMetrics.gridAspect(for: screen) > 1.2 {
+            XCTAssertGreaterThan(gridWidth / gridHeight, 1.2)
+        }
     }
 }

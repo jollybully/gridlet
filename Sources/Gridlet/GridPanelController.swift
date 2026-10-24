@@ -1,9 +1,9 @@
 import AppKit
 
 final class GridPanelWindow: NSPanel {
-    init() {
+    init(size: NSSize = PanelMetrics.referencePanelSize) {
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: PanelMetrics.width, height: PanelMetrics.height),
+            contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height),
             styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -20,8 +20,13 @@ final class GridPanelWindow: NSPanel {
         backgroundColor = .clear
         isOpaque = false
         hasShadow = true
-        contentMinSize = NSSize(width: PanelMetrics.width, height: PanelMetrics.height)
-        contentMaxSize = NSSize(width: PanelMetrics.width, height: PanelMetrics.height)
+        lockSize(size)
+    }
+
+    /// The panel is never user-resized; its size comes from the display's aspect.
+    func lockSize(_ size: NSSize) {
+        contentMinSize = size
+        contentMaxSize = size
     }
 
     override var canBecomeKey: Bool { true }
@@ -54,12 +59,14 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     private let footerGridSize = NSTextField(labelWithString: "8×8")
     private var displayMode: PanelDisplayMode = .live
     private var footerNoTarget = false
+    private var gridHeightConstraint: NSLayoutConstraint?
 
     init(screen: NSScreen) {
         self.screen = screen
-        super.init(window: GridPanelWindow())
+        super.init(window: GridPanelWindow(size: PanelMetrics.panelSize(for: screen)))
         window?.delegate = self
         setupUI()
+        updatePanelGeometry(for: screen)
     }
 
     @available(*, unavailable)
@@ -95,7 +102,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         errorLabel.lineBreakMode = .byTruncatingTail
         errorLabel.cell?.truncatesLastVisibleLine = true
         errorLabel.cell?.wraps = true
-        errorLabel.preferredMaxLayoutWidth = PanelMetrics.width - PanelMetrics.padding * 2
+        errorLabel.preferredMaxLayoutWidth = PanelMetrics.width - PanelMetrics.padding * 2 // refined per screen in updatePanelGeometry
         errorLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         errorLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
@@ -117,6 +124,10 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         }
 
         let pad = PanelMetrics.padding
+        let heightConstraint = gridView.heightAnchor.constraint(
+            equalToConstant: PanelMetrics.gridHeight(for: screen)
+        )
+        gridHeightConstraint = heightConstraint
         NSLayoutConstraint.activate([
             chromeView.topAnchor.constraint(equalTo: content.topAnchor),
             chromeView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -152,7 +163,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
             gridView.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
             gridView.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor, constant: -pad),
             gridView.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 8),
-            gridView.heightAnchor.constraint(equalToConstant: 248),
+            heightConstraint,
 
             footerHint.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
             footerHint.bottomAnchor.constraint(equalTo: chromeView.bottomAnchor, constant: -pad),
@@ -270,10 +281,23 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         return raw
     }
 
+    /// Panel stays Divvy-small; the grid inside takes the display's aspect ratio so
+    /// a selection maps proportionally onto the screen. Recomputed on every show,
+    /// because visibleFrame changes with Dock/menu-bar settings without a screen change.
+    func updatePanelGeometry(for screen: NSScreen) {
+        let size = PanelMetrics.panelSize(for: screen)
+        gridHeightConstraint?.constant = PanelMetrics.gridHeight(for: screen)
+        (window as? GridPanelWindow)?.lockSize(size)
+        errorLabel.preferredMaxLayoutWidth = size.width - PanelMetrics.padding * 2
+        window?.setContentSize(size)
+        window?.layoutIfNeeded()
+    }
+
     func showPanel() {
         guard let window else { return }
+        updatePanelGeometry(for: screen)
         let vf = screen.visibleFrame
-        let size = NSSize(width: PanelMetrics.width, height: PanelMetrics.height)
+        let size = PanelMetrics.panelSize(for: screen)
         let origin = NSPoint(
             x: vf.midX - size.width / 2,
             y: vf.midY - size.height / 2
@@ -330,7 +354,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         ))
         errorLabel.stringValue = String(repeating: "E", count: 400)
         errorLabel.isHidden = false
-        window?.setContentSize(NSSize(width: PanelMetrics.width, height: PanelMetrics.height))
+        window?.setContentSize(PanelMetrics.panelSize(for: screen))
         window?.layoutIfNeeded()
     }
 
@@ -338,7 +362,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         configure(settings: GridSettings.Snapshot(), target: nil, displayMode: .snapshotIdle)
         applyHeaderMetadata(metadata)
         showError(nil)
-        window?.setContentSize(NSSize(width: PanelMetrics.width, height: PanelMetrics.height))
+        window?.setContentSize(PanelMetrics.panelSize(for: screen))
         window?.layoutIfNeeded()
         chromeView.layoutSubtreeIfNeeded()
     }
