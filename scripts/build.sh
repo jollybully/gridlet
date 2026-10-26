@@ -7,10 +7,23 @@ cd "$ROOT"
 echo "==> Swift test"
 swift test
 
-echo "==> Swift build (release)"
-swift build -c release
+echo "==> Swift build (release, universal)"
+# One download for both Apple Silicon and Intel: SwiftPM cross-builds the x86_64 slice
+# alongside the host architecture and lipos them into a single executable.
+if ! swift build -c release --arch arm64 --arch x86_64; then
+  echo "    universal build failed; falling back to the host architecture"
+  swift build -c release
+fi
 
-BIN="$(swift build -c release --show-bin-path)/Gridlet"
+# --show-bin-path without the arch flags reports the single-architecture directory,
+# which can still hold a stale binary, so prefer the universal product when present.
+UNIVERSAL="$ROOT/.build/apple/Products/Release/Gridlet"
+NATIVE="$(swift build -c release --show-bin-path)/Gridlet"
+BIN="$NATIVE"
+if [ -f "$UNIVERSAL" ] && lipo -archs "$UNIVERSAL" 2>/dev/null | grep -q x86_64; then
+  BIN="$UNIVERSAL"
+fi
+echo "    binary: $(lipo -archs "$BIN" 2>/dev/null || echo unknown)"
 APP="$ROOT/dist/Gridlet.app"
 CONTENTS="$APP/Contents"
 MACOS="$CONTENTS/MacOS"
