@@ -420,6 +420,7 @@ final class PanelCoordinator: NSObject {
     private(set) var settings: GridSettings.Snapshot = GridSettings.load()
     private var screenObserver: NSObjectProtocol?
     private var activationObserver: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
     private var dismissLocalMonitor: Any?
     private var dismissGlobalMonitor: Any?
     private(set) var panelsAreVisible = false
@@ -434,6 +435,16 @@ final class PanelCoordinator: NSObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in self?.handleScreenChange() }
+        }
+        // Waking from sleep is where AppKit can hand back invalidated NSScreen objects.
+        // Dropping every panel and overlay first means nothing built against the old
+        // display configuration outlives the transition.
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.teardownWindowsForDisplayChange(reason: "wake") }
         }
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -486,6 +497,7 @@ final class PanelCoordinator: NSObject {
         }
         panelsAreVisible = true
         installDismissMonitors()
+        NSLog("Gridlet: present panels=\(panels.count) target=\(capturedTarget == nil ? "none" : "yes")")
     }
 
     private func resolvedDisplayMode() -> PanelDisplayMode {
@@ -512,6 +524,7 @@ final class PanelCoordinator: NSObject {
     }
 
     func dismissAll(reason: DismissReason) {
+        NSLog("Gridlet: dismiss \(reason)")
         panelsAreVisible = false
         removeDismissMonitors()
         for panel in panels.values { panel.dismiss() }
@@ -664,10 +677,27 @@ final class PanelCoordinator: NSObject {
     }
 
     private func handleScreenChange() {
-        if panels.values.contains(where: { $0.window?.isVisible == true }) {
-            dismissAll(reason: .monitorChange)
+        teardownWindowsForDisplayChange(reason: "screen-change")
+    }
+
+    /// Drop every panel and overlay rather than reusing them across a display or wake
+    /// transition: the NSScreen objects they were built from may no longer be valid.
+    /// Panels are rebuilt lazily on the next presentation, which costs nothing.
+    private func teardownWindowsForDisplayChange(reason: String) {
+        NSLog("Gridlet: teardown (\(reason)) panels=\(panels.count) overlays=\(overlays.count)")
+        panelsAreVisible = false
+        removeDismissMonitors()
+        for panel in panels.values {
+            panel.dismiss()
+            panel.window?.close()
         }
-        rebuildPanelsIfNeeded()
+        panels.removeAll()
+        for overlay in overlays.values {
+            overlay.clear()
+            overlay.orderOut(nil)
+            overlay.close()
+        }
+        overlays.removeAll()
     }
 
     private func handleAppActivation(pid: pid_t, bundleID: String?) {
