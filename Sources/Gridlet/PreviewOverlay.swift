@@ -17,6 +17,9 @@ final class PreviewOverlayWindow: NSWindow {
             defer: false
         )
         level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue - 1)
+        // ARC owns this window through `overlays`; AppKit's default would release it
+        // again on close(), which over-releases and crashes the next autorelease drain.
+        isReleasedWhenClosed = false
         isOpaque = false
         backgroundColor = .clear
         ignoresMouseEvents = true
