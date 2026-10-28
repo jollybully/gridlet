@@ -67,4 +67,28 @@ final class PreviewOverlayTests: XCTestCase {
         XCTAssertEqual(secondModel.width, second.width, accuracy: 0.5)
         XCTAssertEqual(secondModel.height, second.height, accuracy: 0.5)
     }
+
+    /// Regression: the overlay is owned by ARC (a plain dictionary entry), so AppKit must
+    /// not release it a second time on close(). It did, and the resulting over-release
+    /// faulted in objc_release during the next main-thread autorelease drain — the
+    /// screen-change/wake crash seen from 0.2.2 through 0.3.2.
+    func testClosingOverlayDoesNotOverReleaseIt() {
+        guard let screen = NSScreen.main else {
+            XCTFail("no main screen")
+            return
+        }
+        let overlay: PreviewOverlayWindow? = PreviewOverlayWindow(screen: screen)
+        weak var weakOverlay = overlay
+
+        XCTAssertFalse(
+            overlay?.isReleasedWhenClosed ?? true,
+            "overlay must be owned by ARC; release-when-closed plus ARC over-releases it"
+        )
+
+        overlay?.close()
+        XCTAssertNotNil(
+            weakOverlay,
+            "close() released the overlay out from under ARC — the over-release crash is back"
+        )
+    }
 }
