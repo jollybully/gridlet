@@ -1,10 +1,10 @@
 # Gridlet
 
-A tiny macOS window manager. Press your shortcut, drag a rectangle on the grid, and the window you were using snaps to that part of the screen.
+A tiny macOS window manager. Press a shortcut, then drag the focused window onto part of the screen, or send it to another Space.
 
 **Alpha** — works daily, but not notarised. Universal build, macOS 13+.
 
-![Gridlet dragging a selection](media/gridlet-dragging.png)
+![Gridlet panel with Space chips](media/gridlet-spaces.png)
 
 ## Install
 
@@ -17,11 +17,17 @@ Apple Silicon or Intel, macOS 13 or newer.
 
 ## Use
 
-Set your shortcut in **Settings…** (default ⌃⌥Space). Focus a window, press the shortcut, drag on the grid, release. **Esc** cancels.
+Set your shortcut in **Settings…** (default ⌃⌥Space). Focus a window and press it. **Esc** cancels.
+
+**Send it to a Space.** The panel lists that display’s Spaces. Click one to send the window there. Option-click also switches to it. The dashed chip is the Space you are already on.
+
+That row appears when [yabai](https://github.com/asmvik/yabai) is running. Gridlet does not install it. Moving a window also needs yabai’s scripting addition (`sudo yabai --load-sa`). Without yabai, the chips are simply absent and the grid is unchanged. **Move windows between Spaces** in Settings turns the row off.
+
+**Resize it.** Drag a rectangle on the grid and release.
+
+![Gridlet dragging a selection](media/gridlet-dragging.png)
 
 The grid is a proportional map of the display, so half the columns by half the rows is exactly half the screen. Settings covers rows and columns (default 8×8), an edge gap of 0–24pt, and a different grid size per display when you have more than one screen.
-
-**Spaces** are optional. If [yabai](https://github.com/asmvik/yabai) is installed and its daemon is running, the panel adds a row of chips for that display’s Spaces. Click one to send the focused window there; option-click also switches to that Space. The dashed chip is the Space you are already on. Yabai has to be able to move windows (its scripting addition, `sudo yabai --load-sa`). Without yabai, or if it isn’t running, the chips never appear and the grid works exactly as above. **Move windows between Spaces** in Settings turns the row off even when yabai is up.
 
 ## Build
 
@@ -47,7 +53,7 @@ find the identity without prompting.
 - No networking, analytics or accounts. Settings live in `UserDefaults`.
 - Minimum-size windows are moved as close as possible rather than refused.
 - Full-screen windows, sheets and the desktop are ignored.
-- Sending a window to another Space needs yabai. Gridlet does not install it, and the grid does not depend on it.
+- Sending a window to another Space needs yabai. The grid does not.
 - Not notarised: signed with a self-signed development certificate, so Gatekeeper asks
   you to confirm the first launch.
 
