@@ -17,9 +17,11 @@ Apple Silicon or Intel, macOS 13 or newer.
 
 ## Use
 
-Set your shortcut in **Settings…** (default ⌃⌥Space). Focus a window, press the shortcut, drag on the grid, release. **Esc** cancels. If yabai is running, the panel lists that display’s Spaces; click one to send the window there. Option-click also switches to it.
+Set your shortcut in **Settings…** (default ⌃⌥Space). Focus a window, press the shortcut, drag on the grid, release. **Esc** cancels.
 
 The grid is a proportional map of the display, so half the columns by half the rows is exactly half the screen. Settings covers rows and columns (default 8×8), an edge gap of 0–24pt, and a different grid size per display when you have more than one screen.
+
+**Spaces** are optional. If [yabai](https://github.com/asmvik/yabai) is installed and its daemon is running, the panel adds a row of chips for that display’s Spaces. Click one to send the focused window there; option-click also switches to that Space. The dashed chip is the Space you are already on. Yabai has to be able to move windows (its scripting addition, `sudo yabai --load-sa`). Without yabai, or if it isn’t running, the chips never appear and the grid works exactly as above. **Move windows between Spaces** in Settings turns the row off even when yabai is up.
 
 ## Build
 
@@ -45,6 +47,7 @@ find the identity without prompting.
 - No networking, analytics or accounts. Settings live in `UserDefaults`.
 - Minimum-size windows are moved as close as possible rather than refused.
 - Full-screen windows, sheets and the desktop are ignored.
+- Sending a window to another Space needs yabai. Gridlet does not install it, and the grid does not depend on it.
 - Not notarised: signed with a self-signed development certificate, so Gatekeeper asks
   you to confirm the first launch.
 
