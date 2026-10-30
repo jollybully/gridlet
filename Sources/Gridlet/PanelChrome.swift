@@ -60,10 +60,17 @@ enum PanelMetrics {
         return min(max(exact, minGridHeight), maxGridHeight).rounded()
     }
 
-    static func panelSize(for screen: NSScreen) -> NSSize {
+    static let spaceStripHeight: CGFloat = 26
+    static let spaceStripTopGap: CGFloat = 4
+
+    static func stripExtra(hasSpaceStrip: Bool) -> CGFloat {
+        hasSpaceStrip ? spaceStripTopGap + spaceStripHeight : 0
+    }
+
+    static func panelSize(for screen: NSScreen, hasSpaceStrip: Bool = false) -> NSSize {
         NSSize(
             width: width,
-            height: chromeAboveGrid + gridHeight(for: screen) + chromeBelowGrid
+            height: chromeAboveGrid + gridHeight(for: screen) + chromeBelowGrid + stripExtra(hasSpaceStrip: hasSpaceStrip)
         )
     }
 

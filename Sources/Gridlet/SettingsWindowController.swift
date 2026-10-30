@@ -25,12 +25,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let closeAfterResizeCheckbox = NSButton(checkboxWithTitle: "Close after resizing", target: nil, action: nil)
     private let previewCheckbox = NSButton(checkboxWithTitle: "Show resize preview", target: nil, action: nil)
     private let loginCheckbox = NSButton(checkboxWithTitle: "Launch Gridlet at login", target: nil, action: nil)
+    private let yabaiCheckbox = NSButton(checkboxWithTitle: "Move windows between Spaces", target: nil, action: nil)
+    private let yabaiStatus = NSTextField(labelWithString: "")
+    private var yabaiAvailabilityOverride: YabaiAvailability?
     private let axStatus = NSTextField(labelWithString: "")
 
     private init() {
         settings = GridSettings.load()
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 404),
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 420),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -52,6 +55,20 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     var globalHotKeyRecorder: HotKeyRecorderView { hotkeyRecorder }
 
     var contentRootForTests: NSView? { window?.contentView }
+    var yabaiCheckboxForTests: NSButton { yabaiCheckbox }
+
+    func applyYabaiAvailabilityForTests(_ availability: YabaiAvailability) {
+        yabaiAvailabilityOverride = availability
+        updateYabaiStatus()
+    }
+
+    /// Snapshot-only. Does not write UserDefaults.
+    func previewYabaiAvailability(_ availability: YabaiAvailability) {
+        yabaiAvailabilityOverride = availability
+        settings.sendWithYabai = true
+        yabaiCheckbox.state = .on
+        updateYabaiStatus()
+    }
 
     func show() {
         reloadFromSettings()
@@ -116,6 +133,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         previewCheckbox.action = #selector(toggleChanged)
         loginCheckbox.target = self
         loginCheckbox.action = #selector(loginToggled)
+        yabaiCheckbox.target = self
+        yabaiCheckbox.action = #selector(yabaiToggled)
+        yabaiStatus.font = .systemFont(ofSize: 11)
+        yabaiStatus.textColor = .secondaryLabelColor
+        yabaiStatus.lineBreakMode = .byWordWrapping
+        yabaiStatus.maximumNumberOfLines = 2
 
         axStatus.font = .systemFont(ofSize: 11)
         axStatus.textColor = .secondaryLabelColor
@@ -133,7 +156,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         for v in [hotkeyTitle, hotkeyRecorder, hotkeyStatus, gridTitle, displayPopup, resetGridButton,
                   rowsLabel, rowsValue, rowsStepper, colsLabel, colsValue, colsStepper,
                   gapLabel, gapStepper, gapValue,
-                  closeAfterResizeCheckbox, previewCheckbox, loginCheckbox, axStatus, axButton] as [NSView] {
+                  closeAfterResizeCheckbox, previewCheckbox, loginCheckbox,
+                  yabaiCheckbox, yabaiStatus, axStatus, axButton] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(v)
         }
@@ -152,7 +176,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             hotkeyStatus.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
             hotkeyStatus.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -pad),
 
-            gridTitle.topAnchor.constraint(equalTo: hotkeyStatus.bottomAnchor, constant: 16),
+            gridTitle.topAnchor.constraint(equalTo: hotkeyStatus.bottomAnchor, constant: 10),
             gridTitle.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
 
             displayPopup.centerYAnchor.constraint(equalTo: gridTitle.centerYAnchor),
@@ -161,7 +185,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             resetGridButton.leadingAnchor.constraint(equalTo: displayPopup.trailingAnchor, constant: 6),
             resetGridButton.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -pad),
 
-            rowsLabel.topAnchor.constraint(equalTo: gridTitle.bottomAnchor, constant: 12),
+            rowsLabel.topAnchor.constraint(equalTo: gridTitle.bottomAnchor, constant: 8),
             rowsLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
             rowsValue.centerYAnchor.constraint(equalTo: rowsLabel.centerYAnchor),
             rowsValue.leadingAnchor.constraint(equalTo: rowsLabel.trailingAnchor, constant: 12),
@@ -176,7 +200,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             colsStepper.centerYAnchor.constraint(equalTo: colsLabel.centerYAnchor),
             colsStepper.leadingAnchor.constraint(equalTo: colsValue.trailingAnchor, constant: 4),
 
-            gapLabel.topAnchor.constraint(equalTo: rowsLabel.bottomAnchor, constant: 12),
+            gapLabel.topAnchor.constraint(equalTo: rowsLabel.bottomAnchor, constant: 8),
             gapLabel.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
             gapValue.centerYAnchor.constraint(equalTo: gapLabel.centerYAnchor),
             gapValue.leadingAnchor.constraint(equalTo: gapLabel.trailingAnchor, constant: 12),
@@ -184,7 +208,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             gapStepper.centerYAnchor.constraint(equalTo: gapLabel.centerYAnchor),
             gapStepper.leadingAnchor.constraint(equalTo: gapValue.trailingAnchor, constant: 4),
 
-            closeAfterResizeCheckbox.topAnchor.constraint(equalTo: gapLabel.bottomAnchor, constant: 14),
+            closeAfterResizeCheckbox.topAnchor.constraint(equalTo: gapLabel.bottomAnchor, constant: 10),
             closeAfterResizeCheckbox.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
 
             previewCheckbox.topAnchor.constraint(equalTo: closeAfterResizeCheckbox.bottomAnchor, constant: 8),
@@ -193,7 +217,15 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             loginCheckbox.topAnchor.constraint(equalTo: previewCheckbox.bottomAnchor, constant: 8),
             loginCheckbox.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
 
-            axStatus.topAnchor.constraint(equalTo: loginCheckbox.bottomAnchor, constant: 16),
+            yabaiCheckbox.topAnchor.constraint(equalTo: loginCheckbox.bottomAnchor, constant: 8),
+            yabaiCheckbox.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
+            yabaiCheckbox.trailingAnchor.constraint(lessThanOrEqualTo: content.trailingAnchor, constant: -pad),
+
+            yabaiStatus.topAnchor.constraint(equalTo: yabaiCheckbox.bottomAnchor, constant: 2),
+            yabaiStatus.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
+            yabaiStatus.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -pad),
+
+            axStatus.topAnchor.constraint(equalTo: yabaiStatus.bottomAnchor, constant: 8),
             axStatus.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
             axStatus.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -pad),
 
@@ -214,8 +246,27 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         gapValue.stringValue = "\(settings.gap) pt"
         closeAfterResizeCheckbox.state = settings.keepPanelOpen ? .off : .on
         previewCheckbox.state = settings.showPreview ? .on : .off
+        yabaiCheckbox.state = settings.sendWithYabai ? .on : .off
+        updateYabaiStatus()
         updateAXStatus()
         updateLoginFromService()
+    }
+
+    private func updateYabaiStatus() {
+        guard settings.sendWithYabai else {
+            yabaiStatus.stringValue = ""
+            return
+        }
+        switch yabaiAvailabilityOverride ?? YabaiLiveClient().availability() {
+        case .available:
+            yabaiStatus.stringValue = "Yabai is running."
+        case .notInstalled:
+            yabaiStatus.stringValue = "yabai isn’t installed."
+        case .notRunning:
+            yabaiStatus.stringValue = "yabai isn’t running."
+        case .unreachable:
+            yabaiStatus.stringValue = "Couldn’t reach yabai."
+        }
     }
 
     private func updateAXStatus() {
@@ -328,6 +379,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         settings.keepPanelOpen = closeAfterResizeCheckbox.state != .on
         settings.showPreview = previewCheckbox.state == .on
         persist()
+    }
+
+    @objc private func yabaiToggled() {
+        settings.sendWithYabai = yabaiCheckbox.state == .on
+        persist()
+        updateYabaiStatus()
     }
 
     @objc private func loginToggled() {

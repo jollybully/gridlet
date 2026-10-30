@@ -73,6 +73,11 @@ if let idx = args.firstIndex(of: "--ui-snapshot"), idx + 1 < args.count {
     if let pidx = args.firstIndex(of: "--snapshot-screen"), pidx + 1 < args.count {
         screen = args[pidx + 1]
     }
+    let showSpaces = args.contains("--snapshot-spaces")
+    var yabaiPreview: String?
+    if let yidx = args.firstIndex(of: "--snapshot-yabai"), yidx + 1 < args.count {
+        yabaiPreview = args[yidx + 1]
+    }
 
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
@@ -81,28 +86,44 @@ if let idx = args.firstIndex(of: "--ui-snapshot"), idx + 1 < args.count {
         let appearance: String?
         let state: String?
         let screen: String
-        init(path: String, appearance: String?, state: String?, screen: String) {
+        let showSpaces: Bool
+        let yabaiPreview: String?
+        init(path: String, appearance: String?, state: String?, screen: String, showSpaces: Bool, yabaiPreview: String?) {
             self.path = path
             self.appearance = appearance
             self.state = state
             self.screen = screen
+            self.showSpaces = showSpaces
+            self.yabaiPreview = yabaiPreview
         }
         func applicationDidFinishLaunching(_ notification: Notification) {
             Task { @MainActor in
                 let code: Int
                 switch screen.lowercased() {
                 case "settings":
-                    code = UISnapshot.captureSettingsPNG(to: path, appearanceName: appearance)
+                    code = UISnapshot.captureSettingsPNG(to: path, appearanceName: appearance, yabaiPreview: yabaiPreview)
                 case "permission":
                     code = UISnapshot.capturePermissionPNG(to: path, appearanceName: appearance)
                 default:
-                    code = UISnapshot.capturePanelPNG(to: path, appearanceName: appearance, state: state)
+                    code = UISnapshot.capturePanelPNG(
+                        to: path,
+                        appearanceName: appearance,
+                        state: state,
+                        showSpaces: showSpaces
+                    )
                 }
                 exit(Int32(code))
             }
         }
     }
-    let snapshotDelegate = SnapshotDelegate(path: path, appearance: appearance, state: state, screen: screen)
+    let snapshotDelegate = SnapshotDelegate(
+        path: path,
+        appearance: appearance,
+        state: state,
+        screen: screen,
+        showSpaces: showSpaces,
+        yabaiPreview: yabaiPreview
+    )
     app.delegate = snapshotDelegate
     withExtendedLifetime(snapshotDelegate) {
         app.run()
@@ -119,6 +140,28 @@ if let idx = args.firstIndex(of: "--smoke-test-target-pid"), idx + 1 < args.coun
     app.setActivationPolicy(.accessory)
     let code = Diagnostics.smokeTest(pid: pid, selectionString: sel)
     exit(Int32(code))
+}
+
+if let idx = args.firstIndex(of: "--yabai-probe"), idx + 1 < args.count {
+    let path = args[idx + 1]
+    let app = NSApplication.shared
+    app.setActivationPolicy(.regular)
+    final class YabaiProbeDelegate: NSObject, NSApplicationDelegate {
+        let path: String
+        init(path: String) { self.path = path }
+        func applicationDidFinishLaunching(_ notification: Notification) {
+            Task { @MainActor in
+                let code = YabaiProbe.run(writingTo: path)
+                exit(code)
+            }
+        }
+    }
+    let probeDelegate = YabaiProbeDelegate(path: path)
+    app.delegate = probeDelegate
+    withExtendedLifetime(probeDelegate) {
+        app.run()
+    }
+    exit(0)
 }
 
 let app = NSApplication.shared

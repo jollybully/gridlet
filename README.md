@@ -17,7 +17,7 @@ Apple Silicon or Intel, macOS 13 or newer.
 
 ## Use
 
-Set your shortcut in **Settings…** (default ⌃⌥Space). Focus a window, press the shortcut, drag on the grid, release. **Esc** cancels.
+Set your shortcut in **Settings…** (default ⌃⌥Space). Focus a window, press the shortcut, drag on the grid, release. **Esc** cancels. If yabai is running, the panel lists that display’s Spaces; click one to send the window there. Option-click also switches to it.
 
 The grid is a proportional map of the display, so half the columns by half the rows is exactly half the screen. Settings covers rows and columns (default 8×8), an edge gap of 0–24pt, and a different grid size per display when you have more than one screen.
 

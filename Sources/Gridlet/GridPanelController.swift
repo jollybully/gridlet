@@ -53,7 +53,12 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     private let settingsButton = NSButton()
     private let targetHeaderView = TargetAppHeaderView()
     var targetHeaderForTests: TargetAppHeaderView { targetHeaderView }
+    var spaceStripForTests: SpaceStripView { spaceStrip }
+    var errorTextForTests: String { errorLabel.stringValue }
     private let errorLabel = NSTextField(labelWithString: "")
+    private let spaceStrip = SpaceStripView()
+    private var spaceStripTopConstraint: NSLayoutConstraint?
+    private var spaceStripHeightConstraint: NSLayoutConstraint?
     private let footerHint = NSTextField(labelWithString: "Drag to resize")
     private let footerDetail = NSTextField(labelWithString: "")
     private let footerGridSize = NSTextField(labelWithString: "8×8")
@@ -116,8 +121,14 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
 
         gridView.delegate = self
         gridView.translatesAutoresizingMaskIntoConstraints = false
+        spaceStrip.translatesAutoresizingMaskIntoConstraints = false
+        spaceStrip.isHidden = true
+        spaceStrip.onActivate = { [weak self] chip, follow in
+            guard let self else { return }
+            self.coordinator?.sendToSpace(chip, follow: follow, on: self.screen)
+        }
 
-        for v in [closeButton, settingsButton, targetHeaderView, errorLabel, gridView,
+        for v in [closeButton, settingsButton, targetHeaderView, errorLabel, spaceStrip, gridView,
                   footerHint, footerDetail, footerGridSize] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             chromeView.addSubview(v)
@@ -128,6 +139,10 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
             equalToConstant: PanelMetrics.gridHeight(for: screen)
         )
         gridHeightConstraint = heightConstraint
+        let stripTop = spaceStrip.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 0)
+        let stripHeight = spaceStrip.heightAnchor.constraint(equalToConstant: 0)
+        spaceStripTopConstraint = stripTop
+        spaceStripHeightConstraint = stripHeight
         NSLayoutConstraint.activate([
             chromeView.topAnchor.constraint(equalTo: content.topAnchor),
             chromeView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
@@ -160,9 +175,14 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
             errorLabel.topAnchor.constraint(equalTo: closeButton.bottomAnchor, constant: 4),
             errorLabel.heightAnchor.constraint(lessThanOrEqualToConstant: PanelMetrics.errorAreaHeight),
 
+            spaceStrip.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
+            spaceStrip.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor, constant: -pad),
+            stripTop,
+            stripHeight,
+
             gridView.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
             gridView.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor, constant: -pad),
-            gridView.topAnchor.constraint(equalTo: errorLabel.bottomAnchor, constant: 8),
+            gridView.topAnchor.constraint(equalTo: spaceStrip.bottomAnchor, constant: 8),
             heightConstraint,
 
             footerHint.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor, constant: pad),
@@ -277,6 +297,20 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         }
     }
 
+    func showSpaceError(_ message: String) {
+        errorLabel.stringValue = message
+        errorLabel.isHidden = message.isEmpty
+    }
+
+    func applySpaceChips(_ chips: [SpaceChip]) {
+        spaceStrip.setChips(chips)
+        let show = !chips.isEmpty
+        spaceStrip.isHidden = !show
+        spaceStripTopConstraint?.constant = show ? PanelMetrics.spaceStripTopGap : 0
+        spaceStripHeightConstraint?.constant = show ? PanelMetrics.spaceStripHeight : 0
+        updatePanelGeometry(for: screen, hasSpaceStrip: show)
+    }
+
     private func userFacingError(_ raw: String) -> String {
         if raw.count > 80 {
             return "Couldn’t resize this window. Try again."
@@ -287,8 +321,8 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     /// Panel stays Divvy-small; the grid inside takes the display's aspect ratio so
     /// a selection maps proportionally onto the screen. Recomputed on every show,
     /// because visibleFrame changes with Dock/menu-bar settings without a screen change.
-    func updatePanelGeometry(for screen: NSScreen) {
-        let size = PanelMetrics.panelSize(for: screen)
+    func updatePanelGeometry(for screen: NSScreen, hasSpaceStrip: Bool = false) {
+        let size = PanelMetrics.panelSize(for: screen, hasSpaceStrip: hasSpaceStrip)
         gridHeightConstraint?.constant = PanelMetrics.gridHeight(for: screen)
         (window as? GridPanelWindow)?.lockSize(size)
         errorLabel.preferredMaxLayoutWidth = size.width - PanelMetrics.padding * 2
@@ -299,9 +333,10 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
 
     func showPanel() {
         guard let window else { return }
-        updatePanelGeometry(for: screen)
+        let hasStrip = spaceStrip.hasChips
+        updatePanelGeometry(for: screen, hasSpaceStrip: hasStrip)
         let vf = screen.visibleFrame
-        let size = PanelMetrics.panelSize(for: screen)
+        let size = PanelMetrics.panelSize(for: screen, hasSpaceStrip: hasStrip)
         let origin = NSPoint(
             x: vf.midX - size.width / 2,
             y: vf.midY - size.height / 2
@@ -418,6 +453,8 @@ final class PanelCoordinator: NSObject {
     private var overlays: [NSScreen: PreviewOverlayWindow] = [:]
     private(set) var capturedTarget: WindowTarget?
     private(set) var settings: GridSettings.Snapshot = GridSettings.load()
+    var spaceClient: any SpaceSending = YabaiLiveClient()
+    var snapshotSpaceChips: [SpaceChip]?
     private var screenObserver: NSObjectProtocol?
     private var activationObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
@@ -488,8 +525,10 @@ final class PanelCoordinator: NSObject {
 
         rebuildPanelsIfNeeded()
         let mode = resolvedDisplayMode()
+        let primaryTop = ScreenGeometry.primaryTopY(screens: NSScreen.screens)
         for (_, panel) in panels {
             panel.configure(settings: settings, target: capturedTarget, displayMode: mode)
+            panel.applySpaceChips(spaceChips(for: panel.screen, mode: mode, primaryTop: primaryTop))
             panel.showPanel()
         }
         for overlay in overlays.values {
@@ -498,6 +537,53 @@ final class PanelCoordinator: NSObject {
         panelsAreVisible = true
         installDismissMonitors()
         NSLog("Gridlet: present panels=\(panels.count) target=\(capturedTarget == nil ? "none" : "yes")")
+    }
+
+    private func spaceChips(for screen: NSScreen, mode: PanelDisplayMode, primaryTop: CGFloat) -> [SpaceChip] {
+        if let snapshotSpaceChips { return snapshotSpaceChips }
+        guard mode == .live, settings.sendWithYabai else { return [] }
+        return spaceClient.chips(screenFrame: screen.frame, primaryTop: primaryTop)
+    }
+
+    func sendToSpace(_ chip: SpaceChip, follow: Bool, on screen: NSScreen) {
+        guard !chip.isCurrent else { return }
+        guard let target = capturedTarget else {
+            panels[screen]?.showSpaceError("No suitable window is focused.")
+            return
+        }
+        let frame = WindowTargetResolver.readBackAXFrame(target)
+        let name = WindowTargetResolver.appDisplayName(for: target)
+        let outcome = spaceClient.send(
+            pid: target.pid,
+            axFrame: frame,
+            appName: name,
+            toSpace: chip.index,
+            follow: follow
+        )
+        applySpaceOutcome(outcome, on: screen)
+    }
+
+    func applySpaceOutcome(_ outcome: SpaceSendOutcome, on screen: NSScreen) {
+        switch outcome {
+        case .ignoredCurrent:
+            break
+        case .failed(let message):
+            panels[screen]?.showSpaceError(message)
+        case .sent(let sent):
+            let client = spaceClient
+            let windowID = sent.windowID
+            let origin = sent.originIndex
+            dismissAll(reason: .applied)
+            SpaceSendToast.shared.show(message: sent.message) {
+                if let message = client.move(windowID: windowID, toSpace: origin) {
+                    NSLog("Gridlet: space undo failed: \(message)")
+                }
+            }
+        }
+    }
+
+    func setCapturedTargetForTests(_ target: WindowTarget?) {
+        capturedTarget = target
     }
 
     private func resolvedDisplayMode() -> PanelDisplayMode {

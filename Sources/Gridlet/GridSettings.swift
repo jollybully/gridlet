@@ -43,6 +43,8 @@ enum GridSettings {
         var showPreview: Bool = true
         var showPanelHotKey: HotKeyBinding = .defaultShowPanel
         var launchAtLogin: Bool = false
+        /// When yabai is answering, the panel can send the focused window to another Space.
+        var sendWithYabai: Bool = true
 
         /// Rows/columns in force on a display: its override, else the default grid.
         func grid(for displayKey: String) -> DisplayGrid {
@@ -72,6 +74,7 @@ enum GridSettings {
         var showPreview: Bool?
         var showPanelHotKey: HotKeyBinding?
         var launchAtLogin: Bool?
+        var sendWithYabai: Bool?
     }
 
     static func clampGrid(_ value: Int) -> Int {
@@ -123,6 +126,7 @@ enum GridSettings {
             if let preview = legacy.showPreview { snap.showPreview = preview }
             if let hotKey = legacy.showPanelHotKey { snap.showPanelHotKey = hotKey }
             if let login = legacy.launchAtLogin { snap.launchAtLogin = login }
+            if let yabai = legacy.sendWithYabai { snap.sendWithYabai = yabai }
             if let gap = legacy.gap { snap.gap = gap }
             if let grids = legacy.displayGrids { snap.displayGrids = grids }
             return normalized(snap)
@@ -134,6 +138,7 @@ enum GridSettings {
             if let keep = object["keepPanelOpen"] as? Bool { snap.keepPanelOpen = keep }
             if let preview = object["showPreview"] as? Bool { snap.showPreview = preview }
             if let login = object["launchAtLogin"] as? Bool { snap.launchAtLogin = login }
+            if let yabai = object["sendWithYabai"] as? Bool { snap.sendWithYabai = yabai }
             if let gap = object["gap"] as? Int { snap.gap = gap }
             if let grids = object["displayGrids"] as? [String: Any] {
                 snap.displayGrids = grids.reduce(into: [:]) { result, entry in

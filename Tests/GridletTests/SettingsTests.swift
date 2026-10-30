@@ -17,11 +17,13 @@ final class SettingsTests: XCTestCase {
         snap.columns = 6
         snap.showPanelHotKey = HotKeyBinding(keyCode: 1, modifiers: UInt32(cmdKey))
         snap.keepPanelOpen = true
+        snap.sendWithYabai = false
         GridSettings.save(snap, to: ud)
         let loaded = GridSettings.load(from: ud)
         XCTAssertEqual(loaded.rows, 5)
         XCTAssertEqual(loaded.columns, 6)
         XCTAssertTrue(loaded.keepPanelOpen)
+        XCTAssertFalse(loaded.sendWithYabai)
         XCTAssertEqual(loaded.showPanelHotKey.keyCode, 1)
         XCTAssertEqual(loaded.showPanelHotKey.modifiers, UInt32(cmdKey))
     }
@@ -76,6 +78,7 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(migrated.rows, 5)
         XCTAssertEqual(migrated.columns, 8)
         XCTAssertFalse(migrated.keepPanelOpen)
+        XCTAssertTrue(migrated.sendWithYabai)
     }
 
     @MainActor
@@ -98,6 +101,11 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(size.width, 340, accuracy: 1)
         XCTAssertGreaterThanOrEqual(size.height, 300)
         XCTAssertLessThanOrEqual(size.height, 420)
+        window.layoutIfNeeded()
+        let yabai = controller.yabaiCheckboxForTests
+        XCTAssertGreaterThanOrEqual(yabai.frame.minY, 0)
+        XCTAssertLessThanOrEqual(yabai.frame.maxY, size.height)
+        XCTAssertFalse(yabai.title.isEmpty)
     }
 
     @MainActor

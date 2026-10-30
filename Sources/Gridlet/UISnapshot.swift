@@ -68,7 +68,8 @@ enum UISnapshot {
     static func capturePanelPNG(
         to path: String,
         appearanceName: String? = nil,
-        state: String? = nil
+        state: String? = nil,
+        showSpaces: Bool = false
     ) -> Int {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
@@ -81,6 +82,7 @@ enum UISnapshot {
         let coord = PanelCoordinator.shared
         coord.uiSmokeMode = false
         coord.snapshotDisplayMode = UISnapshotOptions.panelDisplayMode(state: state)
+        coord.snapshotSpaceChips = showSpaces ? YabaiSnapshotFixture.chips : nil
         coord.presentPanels()
 
         guard let panel = coord.firstPanelWindow() else {
@@ -122,16 +124,25 @@ enum UISnapshot {
         }
 
         coord.snapshotDisplayMode = nil
+        coord.snapshotSpaceChips = nil
         coord.dismissAll(reason: .monitorChange)
         return 0
     }
 
     @MainActor
-    static func captureSettingsPNG(to path: String, appearanceName: String? = nil) -> Int {
+    static func captureSettingsPNG(
+        to path: String,
+        appearanceName: String? = nil,
+        yabaiPreview: String? = nil
+    ) -> Int {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
         SettingsWindowController.shared.show()
+        if let yabaiPreview {
+            let availability: YabaiAvailability = yabaiPreview == "available" ? .available : .notRunning
+            SettingsWindowController.shared.previewYabaiAvailability(availability)
+        }
         guard let window = SettingsWindowController.shared.window else {
             fputs("ui-snapshot: no settings window\n", stderr)
             return 2
