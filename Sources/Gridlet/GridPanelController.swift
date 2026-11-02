@@ -556,6 +556,7 @@ final class PanelCoordinator: NSObject {
         let outcome = spaceClient.send(
             pid: target.pid,
             axFrame: frame,
+            cgWindowID: target.cgWindowID,
             appName: name,
             toSpace: chip.index,
             follow: follow

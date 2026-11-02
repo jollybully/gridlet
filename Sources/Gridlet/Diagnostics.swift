@@ -171,6 +171,42 @@ enum Diagnostics {
         return 8
     }
 
+    /// Send the focused window of `pid` to `destination` through yabai, printing the
+    /// resolved CGWindowID and the outcome. Used to exercise the Space path from a shell.
+    @MainActor
+    static func spaceSend(pid: pid_t, destination: Int, follow: Bool) -> Int {
+        guard WindowTargetResolver.isTrusted() else {
+            fputs("AX not trusted\n", stderr)
+            return 2
+        }
+        guard let target = WindowTargetResolver.target(pid: pid) else {
+            fputs("No valid target for pid \(pid)\n", stderr)
+            return 3
+        }
+        let frame = WindowTargetResolver.readBackAXFrame(target)
+        let windowID = target.cgWindowID.map(String.init) ?? "nil"
+        print("target pid \(pid) cgWindowID=\(windowID) frame=\(frame.map { "\(Int($0.origin.x)),\(Int($0.origin.y)) \(Int($0.width))x\(Int($0.height))" } ?? "unreadable")")
+        let outcome = YabaiLiveClient().send(
+            pid: pid,
+            axFrame: frame,
+            cgWindowID: target.cgWindowID,
+            appName: WindowTargetResolver.appDisplayName(for: target),
+            toSpace: destination,
+            follow: follow
+        )
+        switch outcome {
+        case .sent(let success):
+            print("SENT \(success.message) windowID=\(success.windowID) from \(success.originIndex)")
+            return 0
+        case .ignoredCurrent:
+            print("IGNORED already on Space \(destination)")
+            return 0
+        case .failed(let message):
+            fputs("FAILED \(message)\n", stderr)
+            return 7
+        }
+    }
+
     private static func axDict(_ rect: CGRect) -> [String: Double] {
         [
             "x": Double(rect.origin.x),

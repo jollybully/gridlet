@@ -142,9 +142,24 @@ enum YabaiGeometry {
             .map { SpaceChip(index: $0.index, isCurrent: $0.isVisible) }
     }
 
-    /// Pick the yabai window for an AX target. One window for the pid is enough.
-    /// Several windows require the AX frame to land near the yabai frame.
-    static func matchWindow(pid: pid_t, axFrame: CGRect?, windows: [YabaiWindow]) -> YabaiWindow? {
+    /// Pick the yabai window for an AX target.
+    ///
+    /// The window id wins whenever it is known: yabai's id *is* the CGWindowID, and its
+    /// frame for a window sitting on a hidden Space can be arbitrarily stale (a Chrome
+    /// window on Space 2 reported y=25 while the window sat at y=114), which used to
+    /// make every send fail with "Yabai doesn't see that window".
+    ///
+    /// Without an id, one window for the pid is enough; several windows require the AX
+    /// frame to land near the yabai frame.
+    static func matchWindow(
+        pid: pid_t,
+        axFrame: CGRect?,
+        windows: [YabaiWindow],
+        cgWindowID: Int? = nil
+    ) -> YabaiWindow? {
+        if let cgWindowID, let exact = windows.first(where: { $0.id == cgWindowID }) {
+            return exact
+        }
         let mine = windows.filter { $0.pid == Int(pid) }
         guard !mine.isEmpty else { return nil }
         guard mine.count > 1 else { return mine[0] }
@@ -216,6 +231,7 @@ struct YabaiSession {
     func send(
         pid: pid_t,
         axFrame: CGRect?,
+        cgWindowID: Int?,
         appName: String,
         toSpace destination: Int,
         follow: Bool
@@ -224,7 +240,12 @@ struct YabaiSession {
         guard listed.status == 0, let windows = YabaiJSON.windows(from: listed.stdout) else {
             return .failed(YabaiSession.shortMessage(listed.stderr, fallback: "Couldn’t ask yabai about windows."))
         }
-        guard let window = YabaiGeometry.matchWindow(pid: pid, axFrame: axFrame, windows: windows) else {
+        guard let window = YabaiGeometry.matchWindow(
+            pid: pid,
+            axFrame: axFrame,
+            windows: windows,
+            cgWindowID: cgWindowID
+        ) else {
             return .failed("Yabai doesn’t see that window.")
         }
         if window.isNativeFullscreen {
@@ -345,7 +366,14 @@ enum YabaiProcess {
 protocol SpaceSending: AnyObject {
     func availability() -> YabaiAvailability
     func chips(screenFrame: CGRect, primaryTop: CGFloat) -> [SpaceChip]
-    func send(pid: pid_t, axFrame: CGRect?, appName: String, toSpace index: Int, follow: Bool) -> SpaceSendOutcome
+    func send(
+        pid: pid_t,
+        axFrame: CGRect?,
+        cgWindowID: Int?,
+        appName: String,
+        toSpace index: Int,
+        follow: Bool
+    ) -> SpaceSendOutcome
     func move(windowID: Int, toSpace index: Int) -> String?
 }
 
@@ -375,8 +403,22 @@ final class YabaiLiveClient: SpaceSending {
         return session.chips(screenFrame: screenFrame, primaryTop: primaryTop)
     }
 
-    func send(pid: pid_t, axFrame: CGRect?, appName: String, toSpace index: Int, follow: Bool) -> SpaceSendOutcome {
-        session.send(pid: pid, axFrame: axFrame, appName: appName, toSpace: index, follow: follow)
+    func send(
+        pid: pid_t,
+        axFrame: CGRect?,
+        cgWindowID: Int?,
+        appName: String,
+        toSpace index: Int,
+        follow: Bool
+    ) -> SpaceSendOutcome {
+        session.send(
+            pid: pid,
+            axFrame: axFrame,
+            cgWindowID: cgWindowID,
+            appName: appName,
+            toSpace: index,
+            follow: follow
+        )
     }
 
     func move(windowID: Int, toSpace index: Int) -> String? {

@@ -5,6 +5,9 @@ import Foundation
 struct WindowTarget: Equatable {
     let pid: pid_t
     let axElement: AXUIElement
+    /// The window's CGWindowID, which is also the id yabai uses. Matching on it beats
+    /// comparing frames: yabai reports a stale frame for a window on a hidden Space.
+    var cgWindowID: Int? = nil
 
     static func == (lhs: WindowTarget, rhs: WindowTarget) -> Bool {
         lhs.pid == rhs.pid && CFEqual(lhs.axElement, rhs.axElement)
@@ -106,7 +109,45 @@ enum WindowTargetResolver {
         guard let window = focusedWindow(of: appElement) else { return nil }
         AXUIElementSetMessagingTimeout(window, axTimeoutSeconds)
         guard validateWindow(window, pid: pid) else { return nil }
-        return WindowTarget(pid: pid, axElement: window)
+        return WindowTarget(pid: pid, axElement: window, cgWindowID: windowNumber(window, pid: pid))
+    }
+
+    /// AppKit publishes a window's CGWindowID as `AXWindowNumber`. Apps that build their
+    /// own accessibility tree (Chrome) do not, so fall back to the window server list and
+    /// take the window whose bounds match the AX frame.
+    static func windowNumber(_ window: AXUIElement, pid: pid_t) -> Int? {
+        if let number = intAttribute(window, "AXWindowNumber") { return number }
+        guard let frame = frameOf(window) else { return nil }
+        return cgWindowID(pid: pid, matching: frame)
+    }
+
+    static func cgWindowID(pid: pid_t, matching frame: CGRect) -> Int? {
+        let options: CGWindowListOption = [.optionAll]
+        guard let raw = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+            return nil
+        }
+        var best: (id: Int, distance: CGFloat)?
+        for info in raw {
+            guard (info[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid,
+                  let number = (info[kCGWindowNumber as String] as? NSNumber)?.intValue,
+                  let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                  let x = (bounds["X"] as? NSNumber)?.doubleValue,
+                  let y = (bounds["Y"] as? NSNumber)?.doubleValue,
+                  let w = (bounds["Width"] as? NSNumber)?.doubleValue,
+                  let h = (bounds["Height"] as? NSNumber)?.doubleValue else { continue }
+            let rect = CGRect(x: x, y: y, width: w, height: h)
+            let distance = abs(rect.minX - frame.minX) + abs(rect.minY - frame.minY)
+                + abs(rect.width - frame.width) + abs(rect.height - frame.height)
+            guard distance <= 6 else { continue }
+            if best == nil || distance < best!.distance { best = (number, distance) }
+        }
+        return best?.id
+    }
+
+    private static func frameOf(_ window: AXUIElement) -> CGRect? {
+        guard let position = pointAttribute(window, kAXPositionAttribute),
+              let size = sizeAttribute(window, kAXSizeAttribute) else { return nil }
+        return CGRect(origin: position, size: size)
     }
 
     private static func focusedWindow(of app: AXUIElement) -> AXUIElement? {
@@ -367,6 +408,13 @@ enum WindowTargetResolver {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attr as CFString, &value) == .success else { return nil }
         return value as? String
+    }
+
+    private static func intAttribute(_ element: AXUIElement, _ attr: String) -> Int? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, attr as CFString, &value) == .success,
+              let value else { return nil }
+        return (value as? NSNumber)?.intValue
     }
 
     private static func boolAttribute(_ element: AXUIElement, _ attr: String) -> Bool? {

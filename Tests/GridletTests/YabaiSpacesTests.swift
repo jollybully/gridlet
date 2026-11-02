@@ -120,6 +120,70 @@ final class YabaiSpacesTests: XCTestCase {
         XCTAssertEqual(other?.id, 300971)
     }
 
+    /// A window on a hidden Space carries a stale yabai frame. The CGWindowID is the
+    /// reliable key, and without it the frame comparison picks the wrong window — the
+    /// failure Elliot saw as "Yabai doesn't see that window" for Chrome.
+    func testMatchWindowPrefersWindowIDOverAStaleFrame() {
+        let hiddenWithStaleFrame = YabaiWindow(
+            id: 29503,
+            pid: 629,
+            app: "Google Chrome",
+            frame: YabaiBox(x: 121, y: 25, w: 1680, h: 1055),
+            space: 2,
+            hasAXReference: true,
+            isNativeFullscreen: false,
+            isSticky: false
+        )
+        let visible = YabaiWindow(
+            id: 62,
+            pid: 629,
+            app: "Google Chrome",
+            frame: YabaiBox(x: 113, y: 114, w: 1680, h: 1055),
+            space: 1,
+            hasAXReference: true,
+            isNativeFullscreen: false,
+            isSticky: false
+        )
+        let axFrame = CGRect(x: 113, y: 114, width: 1680, height: 1055)
+        XCTAssertEqual(
+            YabaiGeometry.matchWindow(
+                pid: 629,
+                axFrame: axFrame,
+                windows: [hiddenWithStaleFrame, visible],
+                cgWindowID: 29503
+            )?.id,
+            29503
+        )
+        XCTAssertEqual(
+            YabaiGeometry.matchWindow(pid: 629, axFrame: axFrame, windows: [hiddenWithStaleFrame, visible])?.id,
+            62
+        )
+    }
+
+    func testMatchWindowIgnoresAnUnknownWindowID() {
+        let windows = [
+            YabaiWindow(
+                id: 42,
+                pid: 629,
+                app: "Google Chrome",
+                frame: YabaiBox(x: 0, y: 0, w: 100, h: 100),
+                space: 1,
+                hasAXReference: true,
+                isNativeFullscreen: false,
+                isSticky: false
+            )
+        ]
+        XCTAssertEqual(
+            YabaiGeometry.matchWindow(
+                pid: 629,
+                axFrame: CGRect(x: 0, y: 0, width: 100, height: 100),
+                windows: windows,
+                cgWindowID: 999
+            )?.id,
+            42
+        )
+    }
+
     func testSendArgvAndMembership() throws {
         let moved = windowsJSON.replacingOccurrences(of: "\"id\":300996,\"pid\":34404,\"app\":\"Google Chrome\",\"frame\":{\"x\":0,\"y\":46,\"w\":1905,\"h\":1191},\"space\":2", with: "\"id\":300996,\"pid\":34404,\"app\":\"Google Chrome\",\"frame\":{\"x\":0,\"y\":46,\"w\":1905,\"h\":1191},\"space\":1")
         var calls: [[String]] = []
@@ -139,6 +203,7 @@ final class YabaiSpacesTests: XCTestCase {
         let outcome = session.send(
             pid: 34404,
             axFrame: CGRect(x: 0, y: 46, width: 1905, height: 1191),
+            cgWindowID: nil,
             appName: "Google Chrome",
             toSpace: 1,
             follow: true
@@ -173,6 +238,7 @@ final class YabaiSpacesTests: XCTestCase {
         let outcome = session.send(
             pid: 34404,
             axFrame: CGRect(x: 0, y: 46, width: 1905, height: 1191),
+            cgWindowID: nil,
             appName: "Google Chrome",
             toSpace: 1,
             follow: false
@@ -189,7 +255,7 @@ final class YabaiSpacesTests: XCTestCase {
             calls.append(args)
             return YabaiReply(status: 0, stdout: self.windowsJSON, stderr: "")
         }
-        let outcome = session.send(pid: 1, axFrame: nil, appName: "Sticky", toSpace: 1, follow: false)
+        let outcome = session.send(pid: 1, axFrame: nil, cgWindowID: nil, appName: "Sticky", toSpace: 1, follow: false)
         guard case .failed(let message) = outcome else {
             return XCTFail("expected failure")
         }
@@ -217,7 +283,14 @@ private final class ScriptedSpaceClient: SpaceSending {
     var lastSend: (index: Int, follow: Bool)?
     func availability() -> YabaiAvailability { .available }
     func chips(screenFrame: CGRect, primaryTop: CGFloat) -> [SpaceChip] { [] }
-    func send(pid: pid_t, axFrame: CGRect?, appName: String, toSpace index: Int, follow: Bool) -> SpaceSendOutcome {
+    func send(
+        pid: pid_t,
+        axFrame: CGRect?,
+        cgWindowID: Int?,
+        appName: String,
+        toSpace index: Int,
+        follow: Bool
+    ) -> SpaceSendOutcome {
         lastSend = (index, follow)
         return outcome
     }

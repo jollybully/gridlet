@@ -142,6 +142,14 @@ if let idx = args.firstIndex(of: "--smoke-test-target-pid"), idx + 1 < args.coun
     exit(Int32(code))
 }
 
+if let idx = args.firstIndex(of: "--space-send"), idx + 2 < args.count,
+   let pid = pid_t(args[idx + 1]), let destination = Int(args[idx + 2]) {
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    let code = Diagnostics.spaceSend(pid: pid, destination: destination, follow: args.contains("--follow"))
+    exit(Int32(code))
+}
+
 if let idx = args.firstIndex(of: "--yabai-probe"), idx + 1 < args.count {
     let path = args[idx + 1]
     let app = NSApplication.shared
