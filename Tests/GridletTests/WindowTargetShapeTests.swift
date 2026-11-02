@@ -33,6 +33,15 @@ final class WindowTargetShapeTests: XCTestCase {
         )
     }
 
+    /// Warp publishes its main terminal window as AXWindow/AXSystemDialog. Modal
+    /// dialogs are rejected by the modal check before the subrole is consulted, so
+    /// accepting this subrole cannot make Gridlet grab an alert.
+    func testSystemDialogSubroleAccepted() {
+        XCTAssertTrue(
+            WindowTargetResolver.isAcceptableSubrole("AXSystemDialog", role: kAXWindowRole as String)
+        )
+    }
+
     func testLayoutAreaWithStandardSubroleAccepted() {
         XCTAssertTrue(
             WindowTargetResolver.isAcceptableSubrole(
@@ -54,7 +63,7 @@ final class WindowTargetShapeTests: XCTestCase {
     }
 
     func testOtherSubrolesRejected() {
-        for subrole in ["AXFullScreenWindow", "AXDialog", "AXSystemDialog", "AXUnknown"] {
+        for subrole in ["AXFullScreenWindow", "AXDialog", "AXUnknown"] {
             XCTAssertFalse(
                 WindowTargetResolver.isAcceptableSubrole(subrole, role: kAXWindowRole as String),
                 "subrole '\(subrole)' must not be treated as a placeable window"

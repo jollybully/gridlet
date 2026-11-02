@@ -154,12 +154,16 @@ enum WindowTargetResolver {
     }
 
     /// An empty subrole means the app publishes none (treated as a plain window).
-    /// Otherwise only a standard window — or the `AXFloatingWindow` subrole that
-    /// accompanies After Effects' `AXLayoutArea` — is a window we can place.
+    /// Otherwise accept a standard window, the `AXFloatingWindow` subrole that
+    /// accompanies After Effects' `AXLayoutArea`, or `AXSystemDialog`, which is what
+    /// Warp publishes for its main terminal window. Modal dialogs never reach this
+    /// check — the modal test above rejects them — so an accepted dialog is one the
+    /// user is actually working in.
     static func isAcceptableSubrole(_ subrole: String, role: String) -> Bool {
         if subrole.isEmpty { return true }
         if subrole == kAXStandardWindowSubrole as String { return true }
         if role == AXRoles.layoutArea && subrole == AXRoles.floatingWindow { return true }
+        if subrole == AXRoles.systemDialog { return true }
         return false
     }
 
@@ -401,6 +405,7 @@ private enum AXRoles {
     static let desktop = "AXDesktop"
     static let layoutArea = "AXLayoutArea"
     static let floatingWindow = "AXFloatingWindow"
+    static let systemDialog = "AXSystemDialog"
 }
 
 private extension CGRect {
