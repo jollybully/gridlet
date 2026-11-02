@@ -53,6 +53,7 @@ find the identity without prompting.
 - No networking, analytics or accounts. Settings live in `UserDefaults`.
 - Minimum-size windows are moved as close as possible rather than refused.
 - Full-screen windows, sheets and the desktop are ignored.
+- Apps that publish a non-standard window (After Effects reports its document window as an `AXLayoutArea`) are still snapped as long as Accessibility can move and resize them.
 - Sending a window to another Space needs yabai. The grid does not.
 - Not notarised: signed with a self-signed development certificate, so Gatekeeper asks
   you to confirm the first launch.

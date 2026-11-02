@@ -120,7 +120,7 @@ enum WindowTargetResolver {
         guard canReadFrame(window) else { return false }
 
         let role = stringAttribute(window, kAXRoleAttribute) ?? ""
-        guard role == kAXWindowRole as String else { return false }
+        guard isAcceptableRole(role) else { return false }
 
         if role == AXRoles.systemWide || role == AXRoles.sheet || role == AXRoles.drawer || role == AXRoles.desktop {
             return false
@@ -135,21 +135,32 @@ enum WindowTargetResolver {
             return false
         }
         let subrole = stringAttribute(window, kAXSubroleAttribute) ?? ""
-        if !subrole.isEmpty {
-            let standard = kAXStandardWindowSubrole as String
-            if subrole == standard {
-                // ok
-            } else if subrole.contains("Fullscreen") || subrole == AXRoles.sheet {
-                return false
-            } else {
-                return false
-            }
-        }
+        guard isAcceptableSubrole(subrole, role: role) else { return false }
         guard boolAttribute(window, "AXResizable") != false else { return false }
         guard boolAttribute(window, "AXMovable") != false else { return false }
         guard isAttributeSettable(window, kAXPositionAttribute) else { return false }
         guard isAttributeSettable(window, kAXSizeAttribute) else { return false }
         return true
+    }
+
+    /// Some pro apps publish their document window with a role other than AXWindow.
+    /// After Effects 2026 (26.5) reports `AXLayoutArea` with an `AXFloatingWindow`
+    /// subrole for its main window, and AX happily moves and resizes it, so refusing
+    /// the role alone made Gridlet report "no window available" for the whole app.
+    /// Any role accepted here still has to pass the frame, minimised, fullscreen,
+    /// sheet/drawer and settability checks below.
+    static func isAcceptableRole(_ role: String) -> Bool {
+        role == kAXWindowRole as String || role == AXRoles.layoutArea
+    }
+
+    /// An empty subrole means the app publishes none (treated as a plain window).
+    /// Otherwise only a standard window — or the `AXFloatingWindow` subrole that
+    /// accompanies After Effects' `AXLayoutArea` — is a window we can place.
+    static func isAcceptableSubrole(_ subrole: String, role: String) -> Bool {
+        if subrole.isEmpty { return true }
+        if subrole == kAXStandardWindowSubrole as String { return true }
+        if role == AXRoles.layoutArea && subrole == AXRoles.floatingWindow { return true }
+        return false
     }
 
     private static func canReadFrame(_ window: AXUIElement) -> Bool {
@@ -388,6 +399,8 @@ private enum AXRoles {
     static let sheet = "AXSheet"
     static let drawer = "AXDrawer"
     static let desktop = "AXDesktop"
+    static let layoutArea = "AXLayoutArea"
+    static let floatingWindow = "AXFloatingWindow"
 }
 
 private extension CGRect {
