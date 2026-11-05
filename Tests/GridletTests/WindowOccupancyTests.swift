@@ -109,9 +109,9 @@ final class WindowOccupancyTests: XCTestCase {
         XCTAssertEqual(WindowOccupancy.hintAlpha(coverage: 0.01, isTarget: true), 0)
         let plain = WindowOccupancy.hintAlpha(coverage: 1, isTarget: false)
         let target = WindowOccupancy.hintAlpha(coverage: 1, isTarget: true)
-        XCTAssertLessThan(plain, 0.14, "hint must stay quieter than an idle tile (0.14)")
+        XCTAssertLessThan(plain, 0.07, "hint is a texture, not a state: keep it well under a tile")
         XCTAssertGreaterThan(target, plain)
-        XCTAssertLessThan(target, 0.22, "target hint must stay quieter than a hovered tile (0.22)")
+        XCTAssertLessThan(target, 0.10, "target hint must stay quieter than a hovered tile (0.22)")
         XCTAssertGreaterThan(
             WindowOccupancy.hintAlpha(coverage: 0.8, isTarget: false),
             WindowOccupancy.hintAlpha(coverage: 0.3, isTarget: false)

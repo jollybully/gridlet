@@ -17,6 +17,8 @@ Window-shape audit of every running app (2026-11-02): only Warp published a mova
 
 Space send (2026-11-02): with a Chrome window focused on a hidden Space — yabai reported its frame as 121,25 while Accessibility had it at 113,114 — `--space-send <pid> <space>` resolved the window by CGWindowID and moved it Space 2 → 3 and back. A second Chrome window on the visible Space moved 1 → 3 → 1.
 
-Window hints (0.3.7): captured the panel with a full-screen window and with the same window on the left half only. Tile brightness inside covered cells 76.4 vs 64.4 uncovered (dark appearance), 190.5 vs 203.2 (light) — a ~5-point delta on a 0–255 scale, visible but quieter than the hover and selection tones.
+Window hints: the 0.3.8 per-window outlines were reverted at Elliot's request and the tint halved in 0.3.9. Measured by capturing the panel twice with an unchanged desktop — once with hints on, once with `showWindowHints` off: tile mean 69.2 vs 64.4, a delta of 4.8 levels on a 0–255 scale (12 at the original strength). Present as texture, well under the hover tone.
+
+Note: a binary launched straight from `.build/` has no bundle identifier, so `UserDefaults` never sees the app's settings domain — run `~/Applications/Gridlet.app/Contents/MacOS/Gridlet` when a check depends on stored settings.
 
 Not verified: Warp end to end (it had no window open during the check), physical multi-monitor hardware, notarised distribution.

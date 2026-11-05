@@ -41,13 +41,13 @@ enum WindowOccupancy {
         var isTarget: Bool
     }
 
-    /// Alpha for a covered cell. The idle tile is already label colour at 0.14, so hints
-    /// stay under that: enough to read as "something is here", not enough to compete with
-    /// the selection highlight drawn on top.
+    /// Alpha for a covered cell. Deliberately faint: the idle tile is label colour at 0.14,
+    /// so a hint that merely nudges that reads as a texture rather than as another state.
+    /// Anything under about 2% coverage is dropped, which keeps window edges out of it.
     static func hintAlpha(coverage: Double, isTarget: Bool) -> Double {
         let clamped = max(0, min(1, coverage))
         guard clamped > 0.02 else { return 0 }
-        return isTarget ? 0.06 + 0.10 * clamped : 0.04 + 0.06 * clamped
+        return isTarget ? 0.035 + 0.055 * clamped : 0.02 + 0.04 * clamped
     }
 
     /// Map window frames onto grid cells for one display.
