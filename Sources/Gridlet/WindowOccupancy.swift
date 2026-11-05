@@ -47,7 +47,7 @@ enum WindowOccupancy {
     static func hintAlpha(coverage: Double, isTarget: Bool) -> Double {
         let clamped = max(0, min(1, coverage))
         guard clamped > 0.02 else { return 0 }
-        return isTarget ? 0.02 + 0.03 * clamped : 0.01 + 0.02 * clamped
+        return isTarget ? 0.03 + 0.045 * clamped : 0.015 + 0.03 * clamped
     }
 
     /// Map window frames onto grid cells for one display.
