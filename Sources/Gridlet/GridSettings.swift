@@ -41,6 +41,8 @@ enum GridSettings {
         var displayGrids: [String: DisplayGrid] = [:]
         var keepPanelOpen: Bool = false
         var showPreview: Bool = true
+        /// Faint tint on grid cells that on-screen windows already cover.
+        var showWindowHints: Bool = true
         var showPanelHotKey: HotKeyBinding = .defaultShowPanel
         var launchAtLogin: Bool = false
         /// When yabai is answering, the panel can send the focused window to another Space.
@@ -72,6 +74,7 @@ enum GridSettings {
         var displayGrids: [String: DisplayGrid]?
         var keepPanelOpen: Bool?
         var showPreview: Bool?
+        var showWindowHints: Bool?
         var showPanelHotKey: HotKeyBinding?
         var launchAtLogin: Bool?
         var sendWithYabai: Bool?
@@ -124,6 +127,7 @@ enum GridSettings {
             if let columns = legacy.columns { snap.columns = columns }
             if let keep = legacy.keepPanelOpen { snap.keepPanelOpen = keep }
             if let preview = legacy.showPreview { snap.showPreview = preview }
+            if let hints = legacy.showWindowHints { snap.showWindowHints = hints }
             if let hotKey = legacy.showPanelHotKey { snap.showPanelHotKey = hotKey }
             if let login = legacy.launchAtLogin { snap.launchAtLogin = login }
             if let yabai = legacy.sendWithYabai { snap.sendWithYabai = yabai }
@@ -137,6 +141,7 @@ enum GridSettings {
             if let columns = object["columns"] as? Int { snap.columns = columns }
             if let keep = object["keepPanelOpen"] as? Bool { snap.keepPanelOpen = keep }
             if let preview = object["showPreview"] as? Bool { snap.showPreview = preview }
+            if let hints = object["showWindowHints"] as? Bool { snap.showWindowHints = hints }
             if let login = object["launchAtLogin"] as? Bool { snap.launchAtLogin = login }
             if let yabai = object["sendWithYabai"] as? Bool { snap.sendWithYabai = yabai }
             if let gap = object["gap"] as? Int { snap.gap = gap }

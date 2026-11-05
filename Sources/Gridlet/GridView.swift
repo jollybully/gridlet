@@ -38,6 +38,12 @@ final class GridView: NSView {
         }
     }
 
+    /// Cells already covered by on-screen windows. Drawn as a faint tint on the tile,
+    /// under the hover and selection highlights.
+    var occupancy: GridOccupancy = .none {
+        didSet { needsDisplay = true }
+    }
+
     private var dragStart: (row: Int, col: Int)?
     private var dragCurrent: (row: Int, col: Int)?
     private var hoverCell: (row: Int, col: Int)?
@@ -136,6 +142,19 @@ final class GridView: NSView {
                     palette.tileEdge.setStroke()
                     path.lineWidth = 0.5
                     path.stroke()
+                }
+
+                let covered = occupancy.coverage(row: row, column: col)
+                let alpha = WindowOccupancy.hintAlpha(
+                    coverage: covered,
+                    isTarget: occupancy.targetCoverage(row: row, column: col) > 0.02
+                )
+                if alpha > 0 {
+                    let tone = occupancy.targetCoverage(row: row, column: col) > 0.02
+                        ? NSColor.controlAccentColor
+                        : NSColor.labelColor
+                    tone.withAlphaComponent(CGFloat(alpha)).setFill()
+                    NSBezierPath(roundedRect: rect.insetBy(dx: 1, dy: 1), xRadius: radius, yRadius: radius).fill()
                 }
             }
         }

@@ -63,6 +63,11 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     private let footerDetail = NSTextField(labelWithString: "")
     private let footerGridSize = NSTextField(labelWithString: "8×8")
     private var displayMode: PanelDisplayMode = .live
+    /// Set from the snapshot on every configure, so the hints toggle applies next time the
+    /// panel opens rather than needing a coordinator round-trip.
+    private var windowHintsEnabled = true
+    private var targetWindowID: Int?
+    private var targetPID: pid_t?
     private var footerNoTarget = false
     private var gridHeightConstraint: NSLayoutConstraint?
 
@@ -201,6 +206,9 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         errorMessage: String? = nil
     ) {
         self.displayMode = displayMode
+        windowHintsEnabled = settings.showWindowHints
+        targetWindowID = target?.cgWindowID
+        targetPID = target?.pid
         footerNoTarget = displayMode == .snapshotNoTarget || (displayMode == .live && target == nil)
         let grid = settings.grid(for: GridSettings.displayKey(for: screen))
         gridView.rows = grid.rows
@@ -311,6 +319,31 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         updatePanelGeometry(for: screen, hasSpaceStrip: show)
     }
 
+    /// Tint the cells that on-screen windows already cover. Sampled once per presentation:
+    /// windows do not move while the grid is up, so live tracking would only cost CPU.
+    private func refreshWindowHints() {
+        guard windowHintsEnabled, displayMode != .uiSmoke else {
+            gridView.occupancy = .none
+            return
+        }
+        let screens = NSScreen.screens
+        let windows = WindowOccupancy.onScreenWindows(
+            excludingPIDs: [ProcessInfo.processInfo.processIdentifier]
+        ).map { entry in
+            WindowOccupancy.Window(
+                frame: entry.frame,
+                isTarget: targetWindowID.map { $0 == entry.id } ?? (targetPID == entry.pid)
+            )
+        }
+        gridView.occupancy = WindowOccupancy.cells(
+            rows: gridView.rows,
+            columns: gridView.columns,
+            visibleFrame: screen.visibleFrame,
+            primaryTopY: ScreenGeometry.primaryTopY(screens: screens),
+            windows: windows
+        )
+    }
+
     private func userFacingError(_ raw: String) -> String {
         if raw.count > 80 {
             return "Couldn’t resize this window. Try again."
@@ -347,6 +380,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         if displayMode != .snapshotSelected {
             gridView.prepareForPanelPresentation()
         }
+        refreshWindowHints()
         gridView.window?.makeFirstResponder(gridView)
     }
 

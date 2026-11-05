@@ -100,7 +100,8 @@ final class SettingsTests: XCTestCase {
         let size = window.contentView?.bounds.size ?? .zero
         XCTAssertEqual(size.width, 340, accuracy: 1)
         XCTAssertGreaterThanOrEqual(size.height, 300)
-        XCTAssertLessThanOrEqual(size.height, 420)
+        // One row per option; the window hint toggle added a row in 0.3.7.
+        XCTAssertLessThanOrEqual(size.height, 448)
         window.layoutIfNeeded()
         let yabai = controller.yabaiCheckboxForTests
         XCTAssertGreaterThanOrEqual(yabai.frame.minY, 0)

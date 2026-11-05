@@ -24,6 +24,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private var displayChoices: [(key: String?, title: String)] = []
     private let closeAfterResizeCheckbox = NSButton(checkboxWithTitle: "Close after resizing", target: nil, action: nil)
     private let previewCheckbox = NSButton(checkboxWithTitle: "Show resize preview", target: nil, action: nil)
+    private let hintsCheckbox = NSButton(checkboxWithTitle: "Show where windows already are", target: nil, action: nil)
     private let loginCheckbox = NSButton(checkboxWithTitle: "Launch Gridlet at login", target: nil, action: nil)
     private let yabaiCheckbox = NSButton(checkboxWithTitle: "Move windows between Spaces", target: nil, action: nil)
     private let yabaiStatus = NSTextField(labelWithString: "")
@@ -33,7 +34,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private init() {
         settings = GridSettings.load()
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 420),
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 448),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
@@ -131,6 +132,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         closeAfterResizeCheckbox.action = #selector(toggleChanged)
         previewCheckbox.target = self
         previewCheckbox.action = #selector(toggleChanged)
+        hintsCheckbox.target = self
+        hintsCheckbox.action = #selector(toggleChanged)
         loginCheckbox.target = self
         loginCheckbox.action = #selector(loginToggled)
         yabaiCheckbox.target = self
@@ -156,7 +159,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         for v in [hotkeyTitle, hotkeyRecorder, hotkeyStatus, gridTitle, displayPopup, resetGridButton,
                   rowsLabel, rowsValue, rowsStepper, colsLabel, colsValue, colsStepper,
                   gapLabel, gapStepper, gapValue,
-                  closeAfterResizeCheckbox, previewCheckbox, loginCheckbox,
+                  closeAfterResizeCheckbox, previewCheckbox, hintsCheckbox, loginCheckbox,
                   yabaiCheckbox, yabaiStatus, axStatus, axButton] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(v)
@@ -214,7 +217,10 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             previewCheckbox.topAnchor.constraint(equalTo: closeAfterResizeCheckbox.bottomAnchor, constant: 8),
             previewCheckbox.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
 
-            loginCheckbox.topAnchor.constraint(equalTo: previewCheckbox.bottomAnchor, constant: 8),
+            hintsCheckbox.topAnchor.constraint(equalTo: previewCheckbox.bottomAnchor, constant: 8),
+            hintsCheckbox.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
+
+            loginCheckbox.topAnchor.constraint(equalTo: hintsCheckbox.bottomAnchor, constant: 8),
             loginCheckbox.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: pad),
 
             yabaiCheckbox.topAnchor.constraint(equalTo: loginCheckbox.bottomAnchor, constant: 8),
@@ -246,6 +252,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         gapValue.stringValue = "\(settings.gap) pt"
         closeAfterResizeCheckbox.state = settings.keepPanelOpen ? .off : .on
         previewCheckbox.state = settings.showPreview ? .on : .off
+        hintsCheckbox.state = settings.showWindowHints ? .on : .off
         yabaiCheckbox.state = settings.sendWithYabai ? .on : .off
         updateYabaiStatus()
         updateAXStatus()
@@ -378,6 +385,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     @objc private func toggleChanged() {
         settings.keepPanelOpen = closeAfterResizeCheckbox.state != .on
         settings.showPreview = previewCheckbox.state == .on
+        settings.showWindowHints = hintsCheckbox.state == .on
         persist()
     }
 
