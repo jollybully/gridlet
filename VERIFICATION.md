@@ -3,7 +3,7 @@
 macOS 15.2, Apple Silicon, Swift 6.1.
 
 ```bash
-swift test        # 112 tests, 0 failures
+swift test        # 116 tests, 0 failures
 ./scripts/build.sh
 ```
 
@@ -16,6 +16,8 @@ After Effects 2026 (26.5): `--smoke-test-target-pid` against a live AE document 
 Window-shape audit of every running app (2026-11-02): only Warp published a movable window Gridlet refused (`AXWindow`/`AXSystemDialog`), now accepted; Finder's desktop (`AXScrollArea`) is still refused. Standard `AXWindow`/`AXStandardWindow` apps re-checked end to end: Mail moved to 1680×932.5 and was restored to its 840×1865 frame afterwards.
 
 Space send (2026-11-02): with a Chrome window focused on a hidden Space — yabai reported its frame as 121,25 while Accessibility had it at 113,114 — `--space-send <pid> <space>` resolved the window by CGWindowID and moved it Space 2 → 3 and back. A second Chrome window on the visible Space moved 1 → 3 → 1.
+
+Window outlines (0.3.8): with five windows open (Chrome, Google Chat, TickTick, Clockify, Mail) the panel showed a separate hairline block per app, in both appearances, instead of one merged tint.
 
 Window hints (0.3.7): captured the panel with a full-screen window and with the same window on the left half only. Tile brightness inside covered cells 76.4 vs 64.4 uncovered (dark appearance), 190.5 vs 203.2 (light) — a ~5-point delta on a 0–255 scale, visible but quieter than the hover and selection tones.
 

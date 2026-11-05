@@ -4,13 +4,24 @@ import CoreGraphics
 /// How much of each grid cell is already covered by windows that are on screen.
 /// Coverage is a 0…1 fraction per cell in row-major order, row 0 being the top row.
 struct GridOccupancy: Equatable, Sendable {
+    /// The cells one window occupies, so neighbouring apps can be told apart by an outline
+    /// instead of merging into one tinted area.
+    struct WindowBlock: Equatable, Sendable {
+        var firstRow: Int
+        var lastRow: Int
+        var firstColumn: Int
+        var lastColumn: Int
+        var isTarget: Bool
+    }
+
     var rows: Int
     var columns: Int
     var coverage: [Double]
     /// Coverage belonging to the window about to be moved, drawn in a stronger tone.
     var target: [Double]
+    var blocks: [WindowBlock]
 
-    static let none = GridOccupancy(rows: 0, columns: 0, coverage: [], target: [])
+    static let none = GridOccupancy(rows: 0, columns: 0, coverage: [], target: [], blocks: [])
 
     var isEmpty: Bool {
         coverage.allSatisfy { $0 < 0.02 } && target.allSatisfy { $0 < 0.02 }
@@ -72,6 +83,7 @@ enum WindowOccupancy {
 
         var coverage = [Double](repeating: 0, count: rows * columns)
         var target = [Double](repeating: 0, count: rows * columns)
+        var blocks: [GridOccupancy.WindowBlock] = []
 
         for window in windows {
             let clipped = window.frame.intersection(axVisible)
@@ -89,6 +101,7 @@ enum WindowOccupancy {
             )
             guard firstColumn <= lastColumn, firstRow <= lastRow else { continue }
 
+            var widestCellFraction = 0.0
             for row in firstRow...lastRow {
                 for column in firstColumn...lastColumn {
                     let cell = CGRect(
@@ -104,14 +117,34 @@ enum WindowOccupancy {
                     let index = row * columns + column
                     // Two windows overlapping the same cell cap at one.
                     coverage[index] = min(1, coverage[index] + fraction)
+                    widestCellFraction = max(widestCellFraction, fraction)
                     if window.isTarget {
                         target[index] = min(1, target[index] + fraction)
                     }
                 }
             }
+
+            // A window that only clips the edge of the grid is not worth an outline: an
+            // outline is about telling whole windows apart, so require one cell it really
+            // occupies rather than a sliver of many.
+            if widestCellFraction >= 0.10 {
+                blocks.append(GridOccupancy.WindowBlock(
+                    firstRow: firstRow,
+                    lastRow: lastRow,
+                    firstColumn: firstColumn,
+                    lastColumn: lastColumn,
+                    isTarget: window.isTarget
+                ))
+            }
         }
 
-        return GridOccupancy(rows: rows, columns: columns, coverage: coverage, target: target)
+        return GridOccupancy(
+            rows: rows,
+            columns: columns,
+            coverage: coverage,
+            target: target,
+            blocks: blocks
+        )
     }
 
     /// Ordinary windows currently on screen, in window-server (AX-style) coordinates.

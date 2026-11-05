@@ -104,6 +104,46 @@ final class WindowOccupancyTests: XCTestCase {
         XCTAssertEqual(occupancy.targetCoverage(row: 0, column: 0), 0, accuracy: 0.001)
     }
 
+    func testOneWindowProducesOneOutlineBlock() {
+        let occupancy = cells(windows: [.init(frame: CGRect(x: 0, y: 0, width: 400, height: 600), isTarget: false)])
+        XCTAssertEqual(occupancy.blocks.count, 1)
+        let block = occupancy.blocks[0]
+        XCTAssertEqual(block.firstColumn, 0)
+        XCTAssertEqual(block.lastColumn, 3)
+        XCTAssertEqual(block.firstRow, 0)
+        XCTAssertEqual(block.lastRow, 7)
+        XCTAssertFalse(block.isTarget)
+    }
+
+    /// Two windows side by side must stay two blocks, which is what the per-window outline
+    /// draws; a single merged tint would hide the boundary between the apps.
+    func testSideBySideWindowsProduceTwoBlocks() {
+        let occupancy = cells(windows: [
+            .init(frame: CGRect(x: 0, y: 0, width: 400, height: 600), isTarget: true),
+            .init(frame: CGRect(x: 400, y: 0, width: 400, height: 600), isTarget: false),
+        ])
+        XCTAssertEqual(occupancy.blocks.count, 2)
+        XCTAssertEqual(occupancy.blocks[0].firstColumn, 0)
+        XCTAssertEqual(occupancy.blocks[0].lastColumn, 3)
+        XCTAssertTrue(occupancy.blocks[0].isTarget)
+        XCTAssertEqual(occupancy.blocks[1].firstColumn, 4)
+        XCTAssertEqual(occupancy.blocks[1].lastColumn, 7)
+        XCTAssertFalse(occupancy.blocks[1].isTarget)
+    }
+
+    func testGrazingWindowGetsNoOutline() {
+        // Two points into the display: it tints a sliver of a cell but must not draw a block.
+        let occupancy = cells(windows: [.init(frame: CGRect(x: -198, y: 0, width: 200, height: 600), isTarget: false)])
+        XCTAssertEqual(occupancy.blocks.count, 0)
+    }
+
+    func testBlockSpansOnlyTheRowsAWindowCovers() {
+        let occupancy = cells(windows: [.init(frame: CGRect(x: 0, y: 0, width: 800, height: 75), isTarget: false)])
+        XCTAssertEqual(occupancy.blocks.count, 1)
+        XCTAssertEqual(occupancy.blocks[0].firstRow, 0)
+        XCTAssertEqual(occupancy.blocks[0].lastRow, 0)
+    }
+
     func testHintAlphaStaysSubtleAndStrongerForTheTarget() {
         XCTAssertEqual(WindowOccupancy.hintAlpha(coverage: 0, isTarget: false), 0)
         XCTAssertEqual(WindowOccupancy.hintAlpha(coverage: 0.01, isTarget: true), 0)
