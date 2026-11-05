@@ -81,18 +81,6 @@ final class GridView: NSView {
         )
     }
 
-    /// Bounding box of the cells one window occupies, in view coordinates.
-    private func blockRect(_ block: GridOccupancy.WindowBlock) -> NSRect {
-        let topLeft = tileRect(row: block.firstRow, col: block.firstColumn)
-        let bottomRight = tileRect(row: block.lastRow, col: block.lastColumn)
-        return NSRect(
-            x: topLeft.minX,
-            y: topLeft.minY,
-            width: bottomRight.maxX - topLeft.minX,
-            height: bottomRight.maxY - topLeft.minY
-        )
-    }
-
     private struct TilePalette {
         let idleFill: NSColor
         let hoverFill: NSColor
@@ -169,20 +157,6 @@ final class GridView: NSView {
                     NSBezierPath(roundedRect: rect.insetBy(dx: 1, dy: 1), xRadius: radius, yRadius: radius).fill()
                 }
             }
-        }
-
-        // A thin outline per window keeps adjacent apps distinguishable even though their
-        // tints run into each other.
-        for block in occupancy.blocks {
-            let outline = NSBezierPath(
-                roundedRect: blockRect(block).insetBy(dx: 1.5, dy: 1.5),
-                xRadius: radius,
-                yRadius: radius
-            )
-            let tone = block.isTarget ? NSColor.controlAccentColor : NSColor.labelColor
-            tone.withAlphaComponent(block.isTarget ? 0.42 : 0.20).setStroke()
-            outline.lineWidth = 1
-            outline.stroke()
         }
 
         if let sel, let outer = selectionRect {

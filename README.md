@@ -27,7 +27,7 @@ That row appears when [yabai](https://github.com/asmvik/yabai) is running. Gridl
 
 ![Gridlet dragging a selection](media/gridlet-dragging.png)
 
-The grid is a proportional map of the display, so half the columns by half the rows is exactly half the screen. Settings covers rows and columns (default 8×8), an edge gap of 0–24pt, and a different grid size per display when you have more than one screen. Cells already covered by a window on screen are tinted faintly, each window's span is outlined with a hairline so neighbouring apps stay distinguishable, and the window you are about to move gets both in the accent colour — so you can see the existing layout before you drag. Turn it off with **Show where windows already are**.
+The grid is a proportional map of the display, so half the columns by half the rows is exactly half the screen. Settings covers rows and columns (default 8×8), an edge gap of 0–24pt, and a different grid size per display when you have more than one screen. Cells already covered by a window on screen are tinted faintly — the window you are about to move slightly stronger — so you can see the existing layout before you drag; turn it off with **Show where windows already are**.
 
 ## Build
 
