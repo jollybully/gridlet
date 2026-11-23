@@ -42,6 +42,20 @@ final class WindowTargetShapeTests: XCTestCase {
         )
     }
 
+    /// Premiere Pro 2027 publishes its document window as AXLayoutArea/AXDialog.
+    func testPremiereLayoutAreaDialogAccepted() {
+        XCTAssertTrue(
+            WindowTargetResolver.isAcceptableSubrole("AXDialog", role: "AXLayoutArea")
+        )
+    }
+
+    /// On a plain AXWindow, AXDialog stays out: that shape is an app's own dialog.
+    func testDialogSubroleOnAPlainWindowRejected() {
+        XCTAssertFalse(
+            WindowTargetResolver.isAcceptableSubrole("AXDialog", role: kAXWindowRole as String)
+        )
+    }
+
     func testLayoutAreaWithStandardSubroleAccepted() {
         XCTAssertTrue(
             WindowTargetResolver.isAcceptableSubrole(
@@ -63,7 +77,7 @@ final class WindowTargetShapeTests: XCTestCase {
     }
 
     func testOtherSubrolesRejected() {
-        for subrole in ["AXFullScreenWindow", "AXDialog", "AXUnknown"] {
+        for subrole in ["AXFullScreenWindow", "AXUnknown"] {
             XCTAssertFalse(
                 WindowTargetResolver.isAcceptableSubrole(subrole, role: kAXWindowRole as String),
                 "subrole '\(subrole)' must not be treated as a placeable window"

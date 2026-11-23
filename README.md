@@ -53,7 +53,7 @@ find the identity without prompting.
 - No networking, analytics or accounts. Settings live in `UserDefaults`.
 - Minimum-size windows are moved as close as possible rather than refused.
 - Full-screen windows, sheets and the desktop are ignored.
-- Apps that publish a non-standard window (After Effects reports its document window as an `AXLayoutArea`, Warp as an `AXSystemDialog`) are still snapped as long as Accessibility can move and resize them.
+- Apps that publish a non-standard window (After Effects reports its document window as an `AXLayoutArea`/`AXFloatingWindow`, Premiere Pro 2027 as `AXLayoutArea`/`AXDialog`, Warp as `AXSystemDialog`) are still snapped as long as Accessibility can move and resize them.
 - Sending a window to another Space needs yabai. The grid does not. Space sends match the
   window by its window id, so they also work for windows on a hidden Space, where yabai's
   reported frame can be stale.

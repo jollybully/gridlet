@@ -195,16 +195,20 @@ enum WindowTargetResolver {
     }
 
     /// An empty subrole means the app publishes none (treated as a plain window).
-    /// Otherwise accept a standard window, the `AXFloatingWindow` subrole that
-    /// accompanies After Effects' `AXLayoutArea`, or `AXSystemDialog`, which is what
-    /// Warp publishes for its main terminal window. Modal dialogs never reach this
-    /// check — the modal test above rejects them — so an accepted dialog is one the
-    /// user is actually working in.
+    /// Otherwise accept a standard window or `AXSystemDialog` (Warp's terminal window).
+    ///
+    /// Adobe publishes its document window with a non-standard subrole that also changes
+    /// between releases: After Effects uses `AXFloatingWindow`, Premiere Pro 2027 uses
+    /// `AXDialog`. Both ride on the `AXLayoutArea` role, so the layout-area subroles are
+    /// accepted together rather than one at a time. Modal dialogs never reach this check —
+    /// the modal test above rejects them — so an accepted dialog is one being worked in.
     static func isAcceptableSubrole(_ subrole: String, role: String) -> Bool {
         if subrole.isEmpty { return true }
         if subrole == kAXStandardWindowSubrole as String { return true }
-        if role == AXRoles.layoutArea && subrole == AXRoles.floatingWindow { return true }
         if subrole == AXRoles.systemDialog { return true }
+        if role == AXRoles.layoutArea {
+            return subrole == AXRoles.floatingWindow || subrole == AXRoles.dialog
+        }
         return false
     }
 
@@ -454,6 +458,7 @@ private enum AXRoles {
     static let layoutArea = "AXLayoutArea"
     static let floatingWindow = "AXFloatingWindow"
     static let systemDialog = "AXSystemDialog"
+    static let dialog = "AXDialog"
 }
 
 private extension CGRect {
