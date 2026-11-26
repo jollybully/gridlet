@@ -22,6 +22,12 @@ struct GridSelection: Codable, Equatable, Sendable {
         return GridSelection(rowStart: min(r0, r1), rowEnd: max(r0, r1), colStart: min(c0, c1), colEnd: max(c0, c1))
     }
 
+    /// The whole grid, for one-click "fill the display".
+    static func full(rows: Int, columns: Int) -> GridSelection? {
+        guard rows >= 1, columns >= 1 else { return nil }
+        return GridSelection(rowStart: 0, rowEnd: rows - 1, colStart: 0, colEnd: columns - 1)
+    }
+
     static func fromDrag(
         startRow: Int, startCol: Int,
         endRow: Int, endCol: Int,

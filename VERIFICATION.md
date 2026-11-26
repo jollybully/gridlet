@@ -3,7 +3,7 @@
 macOS 15.2, Apple Silicon, Swift 6.1.
 
 ```bash
-swift test        # 114 tests, 0 failures
+swift test        # 117 tests, 0 failures
 ./scripts/build.sh
 ```
 
@@ -16,6 +16,8 @@ After Effects 2026 (26.5): `--smoke-test-target-pid` against a live AE document 
 Window-shape audit of every running app (2026-11-02): only Warp published a movable window Gridlet refused (`AXWindow`/`AXSystemDialog`), now accepted; Finder's desktop (`AXScrollArea`) is still refused. Standard `AXWindow`/`AXStandardWindow` apps re-checked end to end: Mail moved to 1680×932.5 and was restored to its 840×1865 frame afterwards.
 
 Space send (2026-11-02): with a Chrome window focused on a hidden Space — yabai reported its frame as 121,25 while Accessibility had it at 113,114 — `--space-send <pid> <space>` resolved the window by CGWindowID and moved it Space 2 → 3 and back. A second Chrome window on the visible Space moved 1 → 3 → 1.
+
+Fill the grid (0.3.13): `--smoke-test-target-pid <pid> --selection 8,8,0,0,7,7` — the frame the fill button computes — applied 3360×1865 at (0, 25) to a Chrome window that was 1680×1166, then the original frame was restored.
 
 Premiere Pro 2027 (27.0): its document window publishes role `AXLayoutArea` with subrole `AXDialog`, which 0.3.11 refused. `--smoke-test-target-pid` now applies 1680×932.5 at (1680, 958) — actual 1680×933 — and the original 3359×1865 frame was restored.
 

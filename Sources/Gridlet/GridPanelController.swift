@@ -50,9 +50,11 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
     let gridView = GridView()
     private let chromeView = PanelChromeView()
     private let closeButton = NSButton()
+    private let fillButton = NSButton()
     private let settingsButton = NSButton()
     private let targetHeaderView = TargetAppHeaderView()
     var targetHeaderForTests: TargetAppHeaderView { targetHeaderView }
+    var fillButtonForTests: NSButton { fillButton }
     var spaceStripForTests: SpaceStripView { spaceStrip }
     var errorTextForTests: String { errorLabel.stringValue }
     private let errorLabel = NSTextField(labelWithString: "")
@@ -88,6 +90,20 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
 
         chromeView.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(chromeView)
+
+        fillButton.image = NSImage(
+            systemSymbolName: "arrow.up.left.and.arrow.down.right",
+            accessibilityDescription: "Fill the grid"
+        )
+        fillButton.image?.isTemplate = true
+        fillButton.contentTintColor = .secondaryLabelColor
+        fillButton.bezelStyle = .inline
+        fillButton.isBordered = false
+        fillButton.toolTip = "Fill the grid"
+        fillButton.setAccessibilityLabel("Fill the grid")
+        fillButton.setAccessibilityIdentifier("gridlet-fill-grid")
+        fillButton.target = self
+        fillButton.action = #selector(fillGrid)
 
         closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close")
         closeButton.image?.isTemplate = true
@@ -133,7 +149,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
             self.coordinator?.sendToSpace(chip, follow: follow, on: self.screen)
         }
 
-        for v in [closeButton, settingsButton, targetHeaderView, errorLabel, spaceStrip, gridView,
+        for v in [closeButton, fillButton, settingsButton, targetHeaderView, errorLabel, spaceStrip, gridView,
                   footerHint, footerDetail, footerGridSize] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             chromeView.addSubview(v)
@@ -159,6 +175,11 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
             closeButton.widthAnchor.constraint(equalToConstant: 28),
             closeButton.heightAnchor.constraint(equalToConstant: 28),
 
+            fillButton.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor, constant: -4),
+            fillButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
+            fillButton.widthAnchor.constraint(equalToConstant: 28),
+            fillButton.heightAnchor.constraint(equalToConstant: 28),
+
             settingsButton.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor, constant: -(pad - 4)),
             settingsButton.centerYAnchor.constraint(equalTo: closeButton.centerYAnchor),
             settingsButton.widthAnchor.constraint(equalToConstant: 28),
@@ -171,7 +192,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
                 constant: PanelMetrics.headerSideMargin
             ),
             targetHeaderView.trailingAnchor.constraint(
-                lessThanOrEqualTo: settingsButton.leadingAnchor,
+                lessThanOrEqualTo: fillButton.leadingAnchor,
                 constant: -PanelMetrics.headerSideMargin
             ),
 
@@ -210,6 +231,7 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         targetWindowID = target?.cgWindowID
         targetPID = target?.pid
         footerNoTarget = displayMode == .snapshotNoTarget || (displayMode == .live && target == nil)
+        fillButton.isEnabled = !footerNoTarget
         let grid = settings.grid(for: GridSettings.displayKey(for: screen))
         gridView.rows = grid.rows
         gridView.columns = grid.columns
@@ -388,6 +410,12 @@ final class GridPanelController: NSWindowController, GridViewDelegate, NSWindowD
         gridView.resetSelection()
         window?.orderOut(nil)
         coordinator?.overlay(for: screen)?.clear()
+    }
+
+    @objc private func fillGrid() {
+        let selection = GridSelection.full(rows: gridView.rows, columns: gridView.columns)
+        guard let selection else { return }
+        gridViewCommitted(selection, rows: gridView.rows, columns: gridView.columns)
     }
 
     @objc private func closePanel() {

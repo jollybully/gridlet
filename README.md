@@ -17,7 +17,7 @@ Apple Silicon or Intel, macOS 13 or newer.
 
 ## Use
 
-Set your shortcut in **Settings…** (default ⌃⌥Space). Focus a window and press it. **Esc** cancels.
+Set your shortcut in **Settings…** (default ⌃⌥Space). Focus a window, press the shortcut, drag on the grid, release. **Esc** cancels. The expand button in the panel's top-right fills the whole display with that window in one click — the ordinary windowed kind, not macOS full screen.
 
 **Send it to a Space.** The panel lists that display’s Spaces. Click one to send the window there. Option-click also switches to it. The dashed chip is the Space you are already on.
 
